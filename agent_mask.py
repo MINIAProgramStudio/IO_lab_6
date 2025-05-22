@@ -42,3 +42,6 @@ print("COCO split completed.")
 
 print("Some COCO labels:")
 dflu.first_batch_labels(coco_test, dflu.coco_labels)
+
+dflu.first_batch_images(coco_train)
+
