@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import matplotlib.pyplot as plt
 coco_labels = {0: u'__background__',
  1: u'person',
  2: u'bicycle',
@@ -119,3 +119,16 @@ def print_element_structure(dataset, prefix=''):
             print_element_structure(val, prefix + f'[{i}]')
     else:
         print(f"{prefix} - Unknown type: {type(spec)}")
+
+def first_batch_images(dataset):
+    for batch_images, batch_targets in dataset.take(1):
+        images = batch_images.numpy()  # convert to numpy for matplotlib
+        fig, axs = plt.subplots(2, 4, figsize=(12, 6))
+        axs = axs.flatten()
+
+        for i, img in enumerate(images):
+            axs[i].imshow(img, cmap='gray')
+            axs[i].axis('off')
+
+        plt.tight_layout()
+        plt.show()
