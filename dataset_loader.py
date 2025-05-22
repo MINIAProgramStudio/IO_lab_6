@@ -1,26 +1,5 @@
 import tensorflow as tf
-import matplotlib.pyplot as plt
 import os
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
-from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import Activation
-from tensorflow.keras.layers import Dropout
-
-from tensorflow.keras.datasets import cifar10
-from tensorflow.keras.datasets import cifar100
-from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.utils import plot_model
-from tensorflow.keras.metrics import TopKCategoricalAccuracy
-
-from keras.optimizers import Adam
-from keras.losses import CategoricalCrossentropy
-
 from pycocotools.coco import COCO
 
 import numpy as np
@@ -71,7 +50,18 @@ def coco_load_train(channels=3):
 
     BATCH_SIZE = 8
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    ds = ds.padded_batch(
+        BATCH_SIZE,
+        padded_shapes=(
+            [IMAGE_SIZE, IMAGE_SIZE, 1],  # Image shape
+            {'boxes': [None, 4], 'labels': [None]}  # Variable-length boxes and labels
+        ),
+        padding_values=(
+            0.0,  # Image padding value
+            {'boxes': tf.constant(-1.0, dtype=tf.float32),
+             'labels': tf.constant(-1, dtype=tf.int64)}  # Padding values for boxes and labels
+        )
+    )
     return ds
 
 
@@ -116,5 +106,16 @@ def coco_load_val(channels=3):
 
     BATCH_SIZE = 8
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    ds = ds.padded_batch(
+        BATCH_SIZE,
+        padded_shapes=(
+            [IMAGE_SIZE, IMAGE_SIZE, 1],  # Image shape
+            {'boxes': [None, 4], 'labels': [None]}  # Variable-length boxes and labels
+        ),
+        padding_values=(
+            0.0,  # Image padding value
+            {'boxes': tf.constant(-1.0, dtype=tf.float32),
+             'labels': tf.constant(-1, dtype=tf.int64)}  # Padding values for boxes and labels
+        )
+    )
     return ds
