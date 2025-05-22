@@ -29,9 +29,10 @@ coco_base_dir = "datasets"
 coco_train_img_dir = os.path.join(coco_base_dir, "train2017")
 coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "annotations_trainval2017/annotations", "instances_train2017.json")
-coco_val_ann_file = os.path.join(coco_base_dir, "annotations_trainval2017/annotations", "instances_train2017.json")
+coco_val_ann_file = os.path.join(coco_base_dir, "annotations_trainval2017/annotations", "instances_val2017.json")
+IMAGE_SIZE = 128
 
-def coco_load_train():
+def coco_load_train(channels=3):
     coco = COCO(coco_train_ann_file)
     img_ids = coco.getImgIds()
     img_files = coco.loadImgs(img_ids)
@@ -63,8 +64,8 @@ def coco_load_train():
 
     def preprocess(img_path, boxes, labels):
         img = tf.io.read_file(img_path)
-        img = tf.image.decode_jpeg(img, channels=3)
-        img = tf.image.resize(img, (512, 512))
+        img = tf.image.decode_jpeg(img, channels=channels)
+        img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
         img = tf.cast(img, tf.float32) / 255.0
         return img, {'boxes': boxes, 'labels': labels}
 
@@ -74,7 +75,7 @@ def coco_load_train():
     return ds
 
 
-def coco_load_val():
+def coco_load_val(channels=3):
     coco = COCO(coco_val_ann_file)
     img_ids = coco.getImgIds()
     img_files = coco.loadImgs(img_ids)
@@ -108,8 +109,8 @@ def coco_load_val():
 
     def preprocess(img_path, boxes, labels):
         img = tf.io.read_file(img_path)
-        img = tf.image.decode_jpeg(img, channels=3)
-        img = tf.image.resize(img, (512, 512))
+        img = tf.image.decode_jpeg(img, channels=channels)
+        img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
         img = tf.cast(img, tf.float32) / 255.0
         return img, {'boxes': boxes, 'labels': labels}
 
