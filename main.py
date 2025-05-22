@@ -30,5 +30,5 @@ print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 
 coco_train = dataset_loader.coco_load_train()
-coco_test, coco_train = keras.utils.split_dataset(data, left_size=0.8)
+coco_test, coco_train = keras.utils.split_dataset(coco_train, left_size=0.8)
 coco_val = dataset_loader.coco_load_val()
