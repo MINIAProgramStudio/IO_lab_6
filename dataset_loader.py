@@ -53,7 +53,7 @@ def coco_load_train(channels=3):
     ds = ds.padded_batch(
         BATCH_SIZE,
         padded_shapes=(
-            [IMAGE_SIZE, IMAGE_SIZE, 1],  # Image shape
+            [IMAGE_SIZE, IMAGE_SIZE, channels],  # Image shape
             {'boxes': [None, 4], 'labels': [None]}  # Variable-length boxes and labels
         ),
         padding_values=(
@@ -109,7 +109,7 @@ def coco_load_val(channels=3):
     ds = ds.padded_batch(
         BATCH_SIZE,
         padded_shapes=(
-            [IMAGE_SIZE, IMAGE_SIZE, 1],  # Image shape
+            [IMAGE_SIZE, IMAGE_SIZE, channels],  # Image shape
             {'boxes': [None, 4], 'labels': [None]}  # Variable-length boxes and labels
         ),
         padding_values=(
