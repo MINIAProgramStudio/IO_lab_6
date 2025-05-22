@@ -29,7 +29,8 @@ def coco_load_train(channels=3):
                     (y + h) / img_data['height'], (x + w) / img_data['width']]
             boxes.append(bbox)
             labels.append(ann['category_id'])
-
+        boxes = np.array(boxes, dtype=np.float32).reshape(-1, 4)
+        labels = np.array(labels, dtype=np.int64).reshape(-1)
         return img_path, boxes, labels
 
     def generator():
@@ -85,7 +86,8 @@ def coco_load_val(channels=3):
                     (y + h) / img_data['height'], (x + w) / img_data['width']]
             boxes.append(bbox)
             labels.append(ann['category_id'])
-
+        boxes = np.array(boxes, dtype=np.float32).reshape(-1, 4)
+        labels = np.array(labels, dtype=np.int64).reshape(-1)
         return img_path, boxes, labels
 
     def generator():
@@ -119,3 +121,5 @@ def coco_load_val(channels=3):
         )
     )
     return ds
+
+
