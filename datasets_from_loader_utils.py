@@ -82,12 +82,12 @@ coco_labels = {0: u'__background__',
  79: u'hair drier',
  80: u'toothbrush'}
 
-def first_batch_labels(dataset):
+def first_batch_labels(dataset, labels):
     for images, targets in dataset.take(1):
         labels_tensor = targets['labels']
         labels_np = labels_tensor.numpy()
         for sample_labels in labels_np:
-            readable_labels = [dataset.get(int(label), "unknown") for label in sample_labels if label != -1]
+            readable_labels = [labels.get(int(label), "unknown") for label in sample_labels if label != -1]
             print("Labels:", readable_labels)
 
 def splt_test_and_train(dataset, each_nth = 8):
