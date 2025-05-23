@@ -4,14 +4,16 @@ from pycocotools.coco import COCO
 
 import numpy as np
 
+import datasets_from_loader_utils as dflu
+
 coco_base_dir = "datasets"
 coco_train_img_dir = os.path.join(coco_base_dir, "train2017")
 coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
-IMAGE_SIZE = 128
+IMAGE_SIZE = 64
 BATCH_SIZE = 512
-COCO_NUM_CLASSES = 92
+COCO_NUM_CLASSES = 3
 
 def load_example(img_data, image_dir, coco):
     # get original image dimensions
@@ -179,7 +181,7 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
         img = tf.image.decode_jpeg(img, channels=channels)  # Assume RGB
         img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
         img = tf.cast(img, tf.float32) / 255.0
-        labels -= 92
+        labels = dflu.coco_labels_index_merge(labels)
         if tf.shape(masks)[0] == 0:
             mask = tf.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int64)
             return img, mask
