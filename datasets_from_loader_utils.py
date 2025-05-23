@@ -1,6 +1,6 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
-coco_labels = {0: u'__background__',
+coco_rectangular_labels = {0: u'__background__',
  1: u'person',
  2: u'bicycle',
  3: u'car',
@@ -81,6 +81,100 @@ coco_labels = {0: u'__background__',
  78: u'teddy bear',
  79: u'hair drier',
  80: u'toothbrush'}
+coco_mask_labels = [
+  "banner",         # 0
+  "blanket",        # 1
+  "branch",         # 2
+  "bridge",         # 3
+  "building-other", # 4
+  "bush",           # 5
+  "cabinet",        # 6
+  "cage",           # 7
+  "cardboard",      # 8
+  "carpet",         # 9
+  "ceiling-other",  # 10
+  "ceiling-tile",   # 11
+  "cloth",          # 12
+  "clothes",        # 13
+  "clouds",         # 14
+  "counter",        # 15
+  "cupboard",       # 16
+  "curtain",        # 17
+  "desk-stuff",     # 18
+  "dirt",           # 19
+  "door-stuff",     # 20
+  "fence",          # 21
+  "floor-marble",   # 22
+  "floor-other",    # 23
+  "floor-stone",    # 24
+  "floor-tile",     # 25
+  "floor-wood",     # 26
+  "flower",         # 27
+  "fog",            # 28
+  "food-other",     # 29
+  "fruit",          # 30
+  "furniture-other",# 31
+  "grass",          # 32
+  "gravel",         # 33
+  "ground-other",   # 34
+  "hill",           # 35
+  "house",          # 36
+  "leaves",         # 37
+  "light",          # 38
+  "mat",            # 39
+  "metal",          # 40
+  "mirror-stuff",   # 41
+  "moss",           # 42
+  "mountain",       # 43
+  "mud",            # 44
+  "napkin",         # 45
+  "net",            # 46
+  "paper",          # 47
+  "pavement",       # 48
+  "pillow",         # 49
+  "plant-other",    # 50
+  "plastic",        # 51
+  "platform",       # 52
+  "playingfield",   # 53
+  "railing",        # 54
+  "railroad",       # 55
+  "river",          # 56
+  "road",           # 57
+  "rock",           # 58
+  "roof",           # 59
+  "rug",            # 60
+  "salad",          # 61
+  "sand",           # 62
+  "sea",            # 63
+  "shelf",          # 64
+  "sky-other",      # 65
+  "skyscraper",     # 66
+  "snow",           # 67
+  "solid-other",    # 68
+  "stairs",         # 69
+  "stone",          # 70
+  "straw",          # 71
+  "structural-other", # 72
+  "table",          # 73
+  "tent",           # 74
+  "textile-other",  # 75
+  "towel",          # 76
+  "tree",           # 77
+  "vegetable",      # 78
+  "wall-brick",     # 79
+  "wall-concrete",  # 80
+  "wall-other",     # 81
+  "wall-panel",     # 82
+  "wall-stone",     # 83
+  "wall-tile",      # 84
+  "wall-wood",      # 85
+  "water-other",    # 86
+  "waterdrops",     # 87
+  "window-blind",   # 88
+  "window-other",   # 89
+  "wood",           # 90
+  "other"           # 91
+]
 
 def first_batch_labels(dataset, labels):
     for images, targets in dataset.take(1):
@@ -90,7 +184,7 @@ def first_batch_labels(dataset, labels):
             readable_labels = [labels.get(int(label), "unknown") for label in sample_labels if label != -1]
             print("Labels:", readable_labels)
 
-def splt_test_and_train(dataset, each_nth = 8):
+def split_test_and_train(dataset, each_nth = 8):
     def is_test(x, y):
         return x % each_nth == 0
     def is_train(x, y):
@@ -132,3 +226,39 @@ def first_batch_images(dataset):
 
         plt.tight_layout()
         plt.show()
+
+def first_batch_masks(dataset):
+    for images, masks in dataset.take(1):  # images: (B, H, W, 3), masks: (B, H, W)
+        # Plot up to 8 examples
+        batch_size = images.shape[0]
+        for i in range(batch_size):
+            plt.figure(figsize=(6, 3))
+
+            # Original image
+            plt.subplot(1, 2, 1)
+            plt.imshow(images[i], cmap='gray')
+            plt.title("Image")
+            plt.axis('off')
+
+            # Corresponding binary mask
+            plt.subplot(1, 2, 2)
+            plt.imshow(masks[i])
+            plt.title("Mask")
+            plt.axis('off')
+
+            plt.tight_layout()
+            plt.show()
+
+def compare_datasets(dataset_1, dataset_2):
+    print("Train cardinality:",
+          tf.data.experimental.cardinality(dataset_1).numpy())
+    print("Val   cardinality:",
+          tf.data.experimental.cardinality(dataset_2).numpy())
+
+    for imgs, masks in dataset_1.take(1):
+        print(" train images batch shape:", imgs.shape)
+        print(" train masks  batch shape:", masks.shape)
+
+    for imgs, masks in dataset_2.take(1):
+        print("   val images batch shape:", imgs.shape)
+        print("   val masks  batch shape:", masks.shape)
