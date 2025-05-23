@@ -62,12 +62,12 @@ def rgb_to_label_map(img):
     # Define conditions
     light_condition = mean_rgb > (230 / 255.0)  # Mean > 230/255
     dark_condition = mean_rgb < (20 / 255.0)  # Mean < 20/255
-    red_condition = (r*0.9 - mean_rgb) > 0
-    green_condition = (g*0.9 - mean_rgb) > 0
-    blue_condition = (b*0.9 - mean_rgb) > 0
-    cyan_condition = (r*1.1 - mean_rgb) < 0
-    yellow_condition = (b*1.1 - mean_rgb) < 0
-    magenta_condition = (g*1.1 - mean_rgb) < 0
+    red_condition = (r*0.7 - mean_rgb) > 0
+    green_condition = (g*0.7 - mean_rgb) > 0
+    blue_condition = (b*0.75 - mean_rgb) > 0
+    cyan_condition = (r*1.12 - mean_rgb) < 0
+    yellow_condition = (b*1.265 - mean_rgb) < 0
+    magenta_condition = (g*1.14 - mean_rgb) < 0
 
     # Initialize label map with "gray" (index 8)
     label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
