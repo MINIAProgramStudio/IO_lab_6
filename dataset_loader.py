@@ -1,5 +1,9 @@
+import sys
+
 import tensorflow as tf
 import os
+import sys
+import random
 from pycocotools.coco import COCO
 
 import numpy as np
@@ -14,6 +18,7 @@ coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/
 IMAGE_SIZE = 32
 BATCH_SIZE = 512
 COCO_NUM_CLASSES = 9
+
 
 
 def load_example(img_data, image_dir, coco):
@@ -51,8 +56,19 @@ def load_example(img_data, image_dir, coco):
 
     return img_path, boxes, labels, masks
 
+rgb_cache = dict()
+rgb_cache_keys = rgb_cache.keys()
 
-def rgb_to_label_map(img):
+def rgb_to_label_map(img, use_cache = False):
+    print("RGB")
+    if use_cache:
+        global rgb_cache_keys
+
+        if img.ref() in rgb_cache_keys:
+            print("cache loaded")
+            return rgb_cache[img]
+        else:
+            print("creating cache")
     # Extract R, G, B channels
     r, g, b = img[..., 0], img[..., 1], img[..., 2]
 
@@ -85,10 +101,14 @@ def rgb_to_label_map(img):
     label_map = tf.where(light_condition, 0, label_map)  # light
     label_map = tf.where(dark_condition, 1, label_map)  # dark
 
+    if use_cache:
+        rgb_cache[img.ref()] = label_map
     return label_map
 
 
 def coco_RGB_dataset(split='train', channels=3):
+    global rgb_cache_keys
+    rgb_cache_keys = rgb_cache.keys()
     if split == 'train':
         coco = COCO(coco_train_ann_file)
         img_dir = coco_train_img_dir
