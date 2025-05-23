@@ -33,9 +33,10 @@ import dataset_loader
 import datasets_from_loader_utils as dflu
 
 BAD_MODEL_COEFFICIENT = 4 # reduces model size
-BAD_DATASET_COEFFICIENT = 16 # reduces dataset size
+BAD_DATASET_COEFFICIENT = 30 # reduces dataset size
 dataset_loader.BATCH_SIZE = 128
 dataset_loader.IMAGE_SIZE = 32
+EPOCHS = 10
 
 
 def dice_loss(y_true, y_pred, smooth=1e-6):
@@ -165,7 +166,7 @@ model.compile(
 
 history = model.fit(
     coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
-    epochs=10,
+    epochs=EPOCHS,
     steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
     validation_data=coco_val.take(val_steps//BAD_DATASET_COEFFICIENT),
     validation_steps=val_steps//BAD_DATASET_COEFFICIENT
@@ -194,10 +195,10 @@ plt.show()
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from collections import Counter
 
-
+"""
 # Training set distribution
 train_true_list = []
-for _, masks in tqdm.tqdm(coco_train_and_test.take(train_steps), desc="Training Labels"):
+for _, masks in tqdm.tqdm(coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT), desc="Training Labels"):
     flat = tf.reshape(masks, [-1]).numpy()
     train_true_list.append(flat)
 train_true = np.concatenate(train_true_list)
@@ -205,21 +206,21 @@ print("Training label distribution:", Counter(train_true))
 
 # Validation set distribution
 val_true_list = []
-for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="Validation Labels"):
+for _, masks in tqdm.tqdm(coco_val.take(val_steps//BAD_DATASET_COEFFICIENT), desc="Validation Labels"):
     flat = tf.reshape(masks, [-1]).numpy()
     val_true_list.append(flat)
 val_true = np.concatenate(val_true_list)
 print("Validation label distribution:", Counter(val_true))
-
+"""
 
 y_true_list = []
-for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
+for _, masks in tqdm.tqdm(coco_val.take(val_steps//BAD_DATASET_COEFFICIENT), desc="a"):
     flat = tf.reshape(masks, [-1]).numpy()  # shape (batch*H*W,)
     y_true_list.append(flat)
 
 
 y_pred_list = []
-for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc="b"):
+for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps//BAD_DATASET_COEFFICIENT)), desc="b"):
     preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
     y_pred_list.append(preds_flat)
 
