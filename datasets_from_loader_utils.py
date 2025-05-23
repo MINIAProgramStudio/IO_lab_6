@@ -177,7 +177,9 @@ coco_mask_labels = [
 ]
 coco_merged_mask_labels = [
     "background",
-    "green_stuff",
+    "green",
+    "blue",
+    "white",
     "other"
 ]
 
@@ -189,8 +191,23 @@ def coco_labels_index_merge(labels):
         labels
     )
     labels = tf.where(
-        labels > 1,
+        tf.math.reduce_any(tf.equal(labels[:, None], [133, 148, 155, 157, 158, 179]), axis=1),
         2,  # New class ID
+        labels
+    )
+    labels = tf.where(
+        tf.math.reduce_any(tf.equal(labels[:, None], [93, 102, 103, 104, 106, 109, 114, 117, 130, 133, 137, 139, 141, 143, 167]), axis=1),
+        3,  # New class ID
+        labels
+    )
+    labels = tf.where(
+        labels > 3,
+        4,  # New class ID
+        labels
+    )
+    labels = tf.where(
+        labels < 0,
+        4,  # New class ID
         labels
     )
     #labels = tf.cast(labels, dtype=tf.int64)

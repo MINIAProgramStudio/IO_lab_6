@@ -91,7 +91,7 @@ print("COCO split completed.")
 print("Some COCO labels:")
 dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
-dflu.first_batch_images(coco_train_and_test)
+#dflu.first_batch_images(coco_train_and_test)
 
 #dflu.first_batch_masks(coco_train_and_test)
 
@@ -105,16 +105,16 @@ for _, masks in coco_val.take(1):
 
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
     inputs = tf.keras.Input(shape=input_shape)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same')(inputs)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same')(inputs)
     x = tf.keras.layers.MaxPooling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE*2, (dataset_loader.IMAGE_SIZE//16)*2+1, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//16)*2+1, activation='relu', padding='same')(x)
     x = tf.keras.layers.MaxPooling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE*4, (dataset_loader.IMAGE_SIZE//32)*2+1, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE//32)*2+1, activation='relu', padding='same')(x)
 
     x = tf.keras.layers.UpSampling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE*2, 7, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//16)*2+1, activation='relu', padding='same')(x)
     x = tf.keras.layers.UpSampling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE, 7, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same')(x)
     outputs = tf.keras.layers.Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')(x)
 
     model = tf.keras.Model(inputs, outputs)
@@ -127,15 +127,28 @@ model.summary()
 plot_model(model, show_shapes=True)
 
 
+def masked_loss(y_true, y_pred):
+    mask = tf.cast(y_true != 4, tf.float32)
+
+    # Compute the loss with masking
+    loss = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
+    masked_loss = loss * mask
+
+    # Average over non-masked pixels
+    return tf.reduce_sum(masked_loss) / (tf.reduce_sum(mask) + 1e-6)  # Avoid division by zero
 
 
-model.compile(optimizer=Adam(learning_rate=1e-4, clipnorm=1.0),
-              loss=combined_loss,
-              metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES), "accuracy"])
+# Compile the model with the masked loss
+model = create_segmentation_model()
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4, clipnorm=1.0),
+    loss=masked_loss,
+    metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
+)
 
 history = model.fit(
     coco_train_and_test,
-    epochs=1,
+    epochs=10,
     steps_per_epoch=train_steps,
     validation_data=coco_val,
     validation_steps=val_steps
@@ -152,12 +165,12 @@ plt.plot(history.history['SegmentationMeanIoU'], label = "SegmentationMeanIoU")
 plt.plot(history.history['val_SegmentationMeanIoU'], label = "val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
-
+"""
 plt.plot(history.history['accuracy'], label = "accuracy")
 plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
-#"""
+"""
 #model = tf.keras.models.load_model('test.keras', custom_objects={'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
 model.evaluate(coco_train_and_test, steps=train_steps)
 
