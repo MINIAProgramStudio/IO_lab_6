@@ -27,12 +27,11 @@ import keras
 from pycocotools.coco import COCO
 from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_dataset
 
-
-
 import numpy as np
 
 import dataset_loader
 import datasets_from_loader_utils as dflu
+
 
 def dice_loss(y_true, y_pred, smooth=1e-6):
     # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
@@ -51,10 +50,12 @@ def dice_loss(y_true, y_pred, smooth=1e-6):
     dice = (2. * intersection + smooth) / (union + smooth)
     return 1 - tf.reduce_mean(dice)  # mean over all classes
 
+
 def combined_loss(y_true, y_pred):
     ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
-    d  = dice_loss(y_true, y_pred)
+    d = dice_loss(y_true, y_pred)
     return ce + d
+
 
 class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self, name="SegmentationMeanIoU", *, num_classes, **kwargs):
@@ -78,11 +79,12 @@ class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
         # Keras will pass in both 'name' and 'num_classes' here
         return cls(name=config.get("name"), num_classes=config["num_classes"])
 
+
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 print("Loading MS COCO dataset.")
-coco_train_and_test = dataset_loader.coco_RGB_dataset('train',channels=1)
-coco_val = dataset_loader.coco_RGB_dataset('val',channels=1)
+coco_train_and_test = dataset_loader.coco_RGB_dataset('train', channels=1)
+coco_val = dataset_loader.coco_RGB_dataset('val', channels=1)
 print("MS COCO loaded. Splitting it into train and test.")
 """
 coco_test, coco_train = dflu.split_test_and_train(coco_train_and_test)
@@ -94,7 +96,7 @@ dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
 dflu.first_batch_images(coco_train_and_test)
 
-#dflu.first_batch_masks(coco_train_and_test)
+# dflu.first_batch_masks(coco_train_and_test)
 
 train_steps, val_steps = dataset_loader.coco_cardinality()
 
@@ -104,31 +106,44 @@ for _, masks in coco_train_and_test.take(1):
 for _, masks in coco_val.take(1):
     print("min/max mask IDs:", tf.reduce_min(masks), tf.reduce_max(masks))
 
+BAD_MODEL_COEFFICIENT = 4
+
+
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
     model = Sequential()
     model.add(Input(shape=input_shape))
     model.add(MaxPooling2D((2)))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//2)*2+1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (4 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
+                     activation='relu', padding='same'))
     model.add(MaxPooling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//4)*2+1, activation='relu', padding='same'))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // 2, (dataset_loader.IMAGE_SIZE // 4) * 2 + 1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+                     activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+                     activation='relu', padding='same'))
     model.add(MaxPooling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same'))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE // 8) * 2 + 1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // BAD_MODEL_COEFFICIENT, (dataset_loader.IMAGE_SIZE // 8) * 2 + 1,
+                     activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // BAD_MODEL_COEFFICIENT, (dataset_loader.IMAGE_SIZE // 8) * 2 + 1,
+                     activation='relu', padding='same'))
 
     model.add(UpSampling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//4)*2+1, activation='relu', padding='same'))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // 2, (dataset_loader.IMAGE_SIZE // 4) * 2 + 1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+                     activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+                     activation='relu', padding='same'))
     model.add(UpSampling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//2)*2+1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (4 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
+                     activation='relu', padding='same'))
     model.add(UpSampling2D((2)))
     model.add(Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax'))
     return model
-#"""
+
+
+# """
 model = create_segmentation_model()
 print("model created")
 
@@ -144,22 +159,22 @@ model.compile(
 )
 
 history = model.fit(
-    coco_train_and_test,
-    epochs=20,
-    steps_per_epoch=train_steps,
-    validation_data=coco_val,
-    validation_steps=val_steps
+    coco_train_and_test.take(1),
+    epochs=1,
+    steps_per_epoch=1,
+    validation_data=coco_val.take(1),
+    validation_steps=1
 )
 print(history.history.keys())
 model.save("test.keras")
 
-plt.plot(history.history['loss'], label = "loss")
-plt.plot(history.history['val_loss'], label = "val_loss")
+plt.plot(history.history['loss'], label="loss")
+plt.plot(history.history['val_loss'], label="val_loss")
 plt.legend()
 plt.show()
 
-plt.plot(history.history['SegmentationMeanIoU'], label = "SegmentationMeanIoU")
-plt.plot(history.history['val_SegmentationMeanIoU'], label = "val_SegmentationMeanIoU")
+plt.plot(history.history['SegmentationMeanIoU'], label="SegmentationMeanIoU")
+plt.plot(history.history['val_SegmentationMeanIoU'], label="val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
 """
@@ -168,39 +183,33 @@ plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
 """
-#model = tf.keras.models.load_model('test.keras', custom_objects={'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
-model.evaluate(coco_train_and_test, steps=train_steps)
+# model = tf.keras.models.load_model('test.keras', custom_objects={'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+#model.evaluate(coco_val, steps=val_steps)
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-
-
 y_true_list = []
-for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc = "a"):
-    # masks: (batch, H, W)
-    flat = tf.reshape(masks, [-1]).numpy()         # shape (batch*H*W,)
+for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
+    flat = tf.reshape(masks, [-1]).numpy()  # shape (batch*H*W,)
     y_true_list.append(flat)
 
-# 2) Run model.predict once and flatten predictions
 y_pred_list = []
-for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc = "b"):
-    # batch_preds: (batch, H, W, num_classes)
+for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc="b"):
     preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
     y_pred_list.append(preds_flat)
 
 y_true = np.concatenate(y_true_list)
 y_pred = np.concatenate(y_pred_list)
 
-num_classes = len(dflu.coco_rgb_labels)
+num_classes = len(dflu.coco_rgb_labels)  # 9
 y_pred = np.clip(y_pred, 0, num_classes - 1)
 y_true = np.clip(y_true, 0, num_classes - 1)
 
-# Compute confusion matrix
-cm = confusion_matrix(y_true, y_pred)
+# Compute confusion matrix with all classes
+cm = confusion_matrix(y_true, y_pred, labels=np.arange(num_classes))  # Include all labels 0–8
 
-# Only use labels that appear in either y_true or y_pred
-used_labels = np.unique(np.concatenate([y_true, y_pred]))
-used_label_names = [dflu.coco_rgb_labels[i] for i in used_labels]
+# Use all label names
+used_label_names = dflu.coco_rgb_labels  # All 9 labels
 
 cm_log = np.log1p(cm)
 
