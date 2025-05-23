@@ -3,6 +3,7 @@ from logging import WARNING
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
+import tqdm
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
@@ -90,7 +91,7 @@ print("COCO split completed.")
 print("Some COCO labels:")
 dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
-#dflu.first_batch_images(coco_train_and_test)
+dflu.first_batch_images(coco_train_and_test)
 
 #dflu.first_batch_masks(coco_train_and_test)
 
@@ -123,7 +124,7 @@ model = create_segmentation_model()
 print("model created")
 
 model.summary()
-#plot_model(model, show_shapes=True)
+plot_model(model, show_shapes=True)
 
 
 
@@ -134,7 +135,7 @@ model.compile(optimizer=Adam(learning_rate=1e-4, clipnorm=1.0),
 
 history = model.fit(
     coco_train_and_test,
-    epochs=30,
+    epochs=50,
     steps_per_epoch=train_steps,
     validation_data=coco_val,
     validation_steps=val_steps
@@ -162,33 +163,42 @@ model.evaluate(coco_train_and_test, steps=train_steps)
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+
+
 y_true_list = []
-for _, masks in coco_train_and_test:
+for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc = "a"):
     # masks: (batch, H, W)
     flat = tf.reshape(masks, [-1]).numpy()         # shape (batch*H*W,)
     y_true_list.append(flat)
-y_true = np.concatenate(y_true_list, axis=0)       # shape (total_pixels,)
 
 # 2) Run model.predict once and flatten predictions
 y_pred_list = []
-for batch_preds in model.predict(coco_train_and_test):
+for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc = "b"):
     # batch_preds: (batch, H, W, num_classes)
     preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
     y_pred_list.append(preds_flat)
-y_pred = np.concatenate(y_pred_list, axis=0)       # shape (total_pixels,)
 
-# 3) Compute confusion matrix
+y_true = np.concatenate(y_true_list)
+y_pred = np.concatenate(y_pred_list)
+
+num_classes = len(dflu.coco_rectangular_labels)
+y_pred = np.clip(y_pred, 0, num_classes - 1)
+y_true = np.clip(y_true, 0, num_classes - 1)
+
+# Compute confusion matrix
 cm = confusion_matrix(y_true, y_pred)
 
-# 4) Display without the numeric labels
+# Only use labels that appear in either y_true or y_pred
+used_labels = np.unique(np.concatenate([y_true, y_pred]))
+used_label_names = [dflu.coco_rectangular_labels[i] for i in used_labels]
+
+cm_log = np.log1p(cm)
+
+# Plot
 fig, ax = plt.subplots(figsize=(10, 10))
-disp = ConfusionMatrixDisplay(confusion_matrix=cm,
-                              display_labels=dflu.coco_mask_labels)
-disp.plot(include_values=False,   # hide counts
-          xticks_rotation=90,
-          cmap='Blues',
-          ax=ax)
-plt.title("Confusion Matrix (no values)")
+disp = ConfusionMatrixDisplay(confusion_matrix=cm_log, display_labels=used_label_names)
+disp.plot(include_values=False, xticks_rotation=90, cmap='Blues', ax=ax)
+plt.title("Confusion Matrix")
 plt.grid(False)
 plt.tight_layout()
 plt.show()
