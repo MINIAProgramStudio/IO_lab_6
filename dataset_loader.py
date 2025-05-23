@@ -12,8 +12,9 @@ coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
 IMAGE_SIZE = 32
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 COCO_NUM_CLASSES = 9
+
 
 def load_example(img_data, image_dir, coco):
     # get original image dimensions
@@ -21,8 +22,8 @@ def load_example(img_data, image_dir, coco):
     img_w = img_data['width']
 
     img_path = os.path.join(image_dir, img_data['file_name'])
-    ann_ids  = coco.getAnnIds(imgIds=img_data['id'], iscrowd=False)
-    anns     = coco.loadAnns(ann_ids)
+    ann_ids = coco.getAnnIds(imgIds=img_data['id'], iscrowd=False)
+    anns = coco.loadAnns(ann_ids)
 
     boxes, labels, masks = [], [], []
     for ann in anns:
@@ -41,10 +42,10 @@ def load_example(img_data, image_dir, coco):
         masks.append(mask)
 
     # convert to numpy, ensuring the right shapes
-    boxes  = np.array(boxes,  dtype=np.float32).reshape(-1, 4)
+    boxes = np.array(boxes, dtype=np.float32).reshape(-1, 4)
     labels = np.array(labels, dtype=np.int64).reshape(-1)
     if masks:
-        masks = np.stack(masks, axis=0)   # -> (N, img_h, img_w)
+        masks = np.stack(masks, axis=0)  # -> (N, img_h, img_w)
     else:
         masks = np.zeros((0, img_h, img_w), dtype=np.uint8)
 
@@ -59,14 +60,14 @@ def rgb_to_label_map(img):
     mean_rgb = tf.reduce_mean(img, axis=-1)  # Shape: (IMAGE_SIZE, IMAGE_SIZE)
 
     # Define conditions
-    light_condition = mean_rgb > (230 / 255.0)  # Mean > 230/255
+    light_condition = mean_rgb > (240 / 255.0)  # Mean > 230/255
     dark_condition = mean_rgb < (20 / 255.0)  # Mean < 20/255
-    red_condition = r > (g + b)  # R > G + B
-    green_condition = g > (r + b)  # G > R + B
-    blue_condition = b > (r + g)  # B > R + G
-    cyan_condition = (g + b) / 2 > r  # (G + B) / 2 > R
-    yellow_condition = (r + g) / 2 > b  # (R + G) / 2 > B
-    magenta_condition = (r + b) / 2 > g  # (R + B) / 2 > G
+    red_condition = (r - mean_rgb) > 0
+    green_condition = (g - mean_rgb) > 0
+    blue_condition = (b - mean_rgb) > 0
+    cyan_condition = (r - mean_rgb) < 0
+    yellow_condition = (b - mean_rgb) < 0
+    magenta_condition = (g - mean_rgb) < 0
 
     # Initialize label map with "gray" (index 8)
     label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
@@ -82,6 +83,7 @@ def rgb_to_label_map(img):
     label_map = tf.where(magenta_condition, 7, label_map)  # magenta
 
     return label_map
+
 
 def coco_RGB_dataset(split='train', channels=3):
     if split == 'train':
@@ -121,6 +123,7 @@ def coco_RGB_dataset(split='train', channels=3):
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
     ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     return ds.repeat()
+
 
 def coco_simple_segmentation_dataset(split='train', channels=3):
     if split == 'train':
@@ -168,6 +171,7 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
     ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     return ds.repeat()
+
 
 def coco_cardinality():
     coco_train = COCO(coco_train_ann_file)
