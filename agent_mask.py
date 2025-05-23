@@ -14,6 +14,7 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.layers import Activation
 from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import UpSampling2D
 
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.utils import plot_model
@@ -104,20 +105,28 @@ for _, masks in coco_val.take(1):
     print("min/max mask IDs:", tf.reduce_min(masks), tf.reduce_max(masks))
 
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
-    inputs = tf.keras.Input(shape=input_shape)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same')(inputs)
-    x = tf.keras.layers.MaxPooling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//16)*2+1, activation='relu', padding='same')(x)
-    x = tf.keras.layers.MaxPooling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE//32)*2+1, activation='relu', padding='same')(x)
+    model = Sequential()
+    model.add(Input(shape=input_shape))
+    model.add(MaxPooling2D((2)))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//2)*2+1, activation='relu', padding='same'))
+    model.add(MaxPooling2D((2)))
+    model.add(BatchNormalization())
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//4)*2+1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // 2, (dataset_loader.IMAGE_SIZE // 4) * 2 + 1, activation='relu', padding='same'))
+    model.add(MaxPooling2D((2)))
+    model.add(BatchNormalization())
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE // 8) * 2 + 1, activation='relu', padding='same'))
 
-    x = tf.keras.layers.UpSampling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//16)*2+1, activation='relu', padding='same')(x)
-    x = tf.keras.layers.UpSampling2D()(x)
-    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same')(x)
-    outputs = tf.keras.layers.Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')(x)
-
-    model = tf.keras.Model(inputs, outputs)
+    model.add(UpSampling2D((2)))
+    model.add(BatchNormalization())
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE//2, (dataset_loader.IMAGE_SIZE//4)*2+1, activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // 2, (dataset_loader.IMAGE_SIZE // 4) * 2 + 1, activation='relu', padding='same'))
+    model.add(UpSampling2D((2)))
+    model.add(BatchNormalization())
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE//4, (dataset_loader.IMAGE_SIZE//2)*2+1, activation='relu', padding='same'))
+    model.add(UpSampling2D((2)))
+    model.add(Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax'))
     return model
 #"""
 model = create_segmentation_model()
