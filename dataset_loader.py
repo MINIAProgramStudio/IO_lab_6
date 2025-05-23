@@ -10,7 +10,7 @@ coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
 IMAGE_SIZE = 128
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 COCO_NUM_CLASSES = 92
 
 def load_example(img_data, image_dir, coco):
