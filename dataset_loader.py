@@ -9,9 +9,9 @@ coco_train_img_dir = os.path.join(coco_base_dir, "train2017")
 coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
-IMAGE_SIZE = 32
-BATCH_SIZE = 256
-COCO_NUM_CLASSES = 93
+IMAGE_SIZE = 128
+BATCH_SIZE = 128
+COCO_NUM_CLASSES = 92
 
 def load_example(img_data, image_dir, coco):
     # get original image dimensions
@@ -174,22 +174,16 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
             yield load_example(img_data, img_dir, coco)
 
     def preprocess(img_path, boxes, labels, masks):
-        # 1) load & prep image
+        # 1) Load & prep image
         img = tf.io.read_file(img_path)
-        img = tf.image.decode_jpeg(img, channels=channels)
+        img = tf.image.decode_jpeg(img, channels=channels)  # Assume RGB
         img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
         img = tf.cast(img, tf.float32) / 255.0
-
-        # 2) shift labels 92→1, 93→2, …, 183→92
-        labels = labels - 91  # now in [1..92]
-
-        # 3) if no instances, return all-zero mask
+        labels -= 92
         if tf.shape(masks)[0] == 0:
             mask = tf.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int64)
             return img, mask
 
-        # 4) resize instance masks to IMAGE_SIZE and keep them binary
-        #    result shape: (num_instances, IMAGE_SIZE, IMAGE_SIZE)
         resized_masks = tf.image.resize(
             tf.cast(masks[..., tf.newaxis], tf.float32),
             (IMAGE_SIZE, IMAGE_SIZE),
@@ -197,19 +191,10 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
         )
         resized_masks = tf.cast(resized_masks[..., 0] > 0.5, tf.int64)
 
-        # 5) paint onto a clean canvas
-        canvas = tf.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int64)
-        num_instances = tf.shape(resized_masks)[0]
-
-        for i in tf.range(num_instances):
-            class_id = labels[i]  # an int in [1..92]
-            instance_mask = resized_masks[i]  # 0/1 mask
-            # wherever instance_mask==1, overwrite canvas with class_id
-            canvas = tf.where(
-                instance_mask == 1,
-                tf.fill(tf.shape(canvas), class_id),
-                canvas
-            )
+        expanded_labels = tf.expand_dims(tf.expand_dims(labels, axis=1), axis=2)
+        expanded_labels = tf.cast(expanded_labels, tf.int64)  # Shape: (num_instances, 1, 1)
+        class_masks = resized_masks * expanded_labels  # Broadcasting to (num_instances, IMAGE_SIZE, IMAGE_SIZE)
+        canvas = tf.reduce_max(class_masks, axis=0)  # Shape: (IMAGE_SIZE, IMAGE_SIZE)
 
         return img, canvas
 
