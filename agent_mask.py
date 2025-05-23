@@ -135,7 +135,7 @@ model.compile(optimizer=Adam(learning_rate=1e-4, clipnorm=1.0),
 
 history = model.fit(
     coco_train_and_test,
-    epochs=50,
+    epochs=1,
     steps_per_epoch=train_steps,
     validation_data=coco_val,
     validation_steps=val_steps
@@ -190,7 +190,7 @@ cm = confusion_matrix(y_true, y_pred)
 
 # Only use labels that appear in either y_true or y_pred
 used_labels = np.unique(np.concatenate([y_true, y_pred]))
-used_label_names = [dflu.coco_rectangular_labels[i] for i in used_labels]
+used_label_names = [dflu.coco_merged_mask_labels[i] for i in used_labels]
 
 cm_log = np.log1p(cm)
 
