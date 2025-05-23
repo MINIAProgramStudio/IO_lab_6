@@ -11,9 +11,9 @@ coco_train_img_dir = os.path.join(coco_base_dir, "train2017")
 coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
-IMAGE_SIZE = 128
+IMAGE_SIZE = 32
 BATCH_SIZE = 128
-COCO_NUM_CLASSES = 5
+COCO_NUM_CLASSES = 9
 
 def load_example(img_data, image_dir, coco):
     # get original image dimensions
@@ -50,115 +50,77 @@ def load_example(img_data, image_dir, coco):
 
     return img_path, boxes, labels, masks
 
-def coco_load_train(channels=3):
-    coco = COCO(coco_train_ann_file)
-    img_ids = coco.getImgIds()
-    img_files = coco.loadImgs(img_ids)
-    def generator():
-        for img_data in img_files:
-            yield load_example(img_data, coco_train_img_dir, coco)
 
-    # TF dataset
-    output_types = (tf.string, tf.float32, tf.int64, tf.uint8)
-    output_shapes = ((), (None, 4), (None,), (None, None, None))
-    ds = tf.data.Dataset.from_generator(generator, output_types, output_shapes)
+def rgb_to_label_map(img):
+    # Extract R, G, B channels
+    r, g, b = img[..., 0], img[..., 1], img[..., 2]
 
-    def preprocess(img_path, boxes, labels, masks):
-        img = tf.io.read_file(img_path)
-        img = tf.image.decode_jpeg(img, channels=channels)
-        img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
-        img = tf.cast(img, tf.float32) / 255.0
+    # Compute mean of all channels
+    mean_rgb = tf.reduce_mean(img, axis=-1)  # Shape: (IMAGE_SIZE, IMAGE_SIZE)
 
-        # Resize masks from (N, H, W) to (N, IMAGE_SIZE, IMAGE_SIZE)
-        masks = tf.cast(masks, tf.float32)
-        # tf.image.resize expects rank 3 or 4, so add batch dimension if needed
-        # masks shape: (N, H, W)
-        masks = tf.image.resize(masks[..., tf.newaxis], (IMAGE_SIZE, IMAGE_SIZE), method='nearest')
-        masks = tf.squeeze(masks, axis=-1)
-        masks = tf.cast(masks, tf.uint8)
+    # Define conditions
+    light_condition = mean_rgb > (230 / 255.0)  # Mean > 230/255
+    dark_condition = mean_rgb < (20 / 255.0)  # Mean < 20/255
+    red_condition = r > (g + b)  # R > G + B
+    green_condition = g > (r + b)  # G > R + B
+    blue_condition = b > (r + g)  # B > R + G
+    cyan_condition = (g + b) / 2 > r  # (G + B) / 2 > R
+    yellow_condition = (r + g) / 2 > b  # (R + G) / 2 > B
+    magenta_condition = (r + b) / 2 > g  # (R + B) / 2 > G
 
-        return img, {'boxes': boxes, 'labels': labels, 'masks': masks}
+    # Initialize label map with "gray" (index 8)
+    label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
 
-    def check_labels(img, mask):
-        # mask should be int32 with values in [0, COCO_NUM_CLASSES-1].
-        tf.debugging.assert_greater_equal(mask, 0, message="mask < 0")
-        tf.debugging.assert_less(mask, COCO_NUM_CLASSES,
-                                 message=f"mask ≥ {COCO_NUM_CLASSES}")
-        return img, mask
-    ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE).map(check_labels, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.padded_batch(
-        BATCH_SIZE,
-        padded_shapes=(
-            [IMAGE_SIZE, IMAGE_SIZE, channels],
-            {
-                'boxes': [None, 4],
-                'labels': [None],
-                'masks': [None, IMAGE_SIZE, IMAGE_SIZE]
-            }
-        ),
-        padding_values=(
-            0.0,
-            {
-                'boxes': tf.constant(-1.0, dtype=tf.float32),
-                'labels': tf.constant(-1, dtype=tf.int64),
-                'masks': tf.constant(0, dtype=tf.uint8)
-            }
-        )
-    )
-    return ds
+    # Apply conditions in order of precedence
+    label_map = tf.where(light_condition, 0, label_map)  # light
+    label_map = tf.where(dark_condition, 1, label_map)  # dark
+    label_map = tf.where(red_condition, 2, label_map)  # red
+    label_map = tf.where(green_condition, 3, label_map)  # green
+    label_map = tf.where(blue_condition, 4, label_map)  # blue
+    label_map = tf.where(cyan_condition, 5, label_map)  # cyan
+    label_map = tf.where(yellow_condition, 6, label_map)  # yellow
+    label_map = tf.where(magenta_condition, 7, label_map)  # magenta
 
+    return label_map
 
-def coco_load_val(channels=3):
-    coco = COCO(coco_val_ann_file)
+def coco_RGB_dataset(split='train', channels=3):
+    if split == 'train':
+        coco = COCO(coco_train_ann_file)
+        img_dir = coco_train_img_dir
+    else:
+        coco = COCO(coco_val_ann_file)
+        img_dir = coco_val_img_dir
+
     img_ids = coco.getImgIds()
     img_files = coco.loadImgs(img_ids)
 
     def generator():
         for img_data in img_files:
-            yield load_example(img_data, coco_val_img_dir, coco)
+            yield load_example(img_data, img_dir, coco)
 
-    # TF dataset
+    def preprocess(img_path, boxes, labels, masks):
+        # Load and prep image
+        img = tf.io.read_file(img_path)
+        img = tf.image.decode_jpeg(img, channels=3)  # RGB image
+        img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
+        img = tf.cast(img, tf.float16) / 255.0  # Normalize to [0, 1]
+
+        # Generate label map from RGB values
+        label_map = rgb_to_label_map(img)
+
+        if channels == 1:
+            img = tf.image.rgb_to_grayscale(img)
+
+        # If you still need boxes or other outputs, adjust accordingly
+        # For now, return only img and label_map
+        return img, label_map
+
     output_types = (tf.string, tf.float32, tf.int64, tf.uint8)
     output_shapes = ((), (None, 4), (None,), (None, None, None))
     ds = tf.data.Dataset.from_generator(generator, output_types, output_shapes)
-
-    def preprocess(img_path, boxes, labels, masks):
-        img = tf.io.read_file(img_path)
-        img = tf.image.decode_jpeg(img, channels=channels)
-        img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
-        img = tf.cast(img, tf.float32) / 255.0
-
-        # Resize masks from (N, H, W) to (N, IMAGE_SIZE, IMAGE_SIZE)
-        masks = tf.cast(masks, tf.float32)
-        # tf.image.resize expects rank 3 or 4, so add batch dimension if needed
-        # masks shape: (N, H, W)
-        masks = tf.image.resize(masks[..., tf.newaxis], (IMAGE_SIZE, IMAGE_SIZE), method='nearest')
-        masks = tf.squeeze(masks, axis=-1)
-        masks = tf.cast(masks, tf.uint8)
-
-        return img, {'boxes': boxes, 'labels': labels, 'masks': masks}
-
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.padded_batch(
-        BATCH_SIZE,
-        padded_shapes=(
-            [IMAGE_SIZE, IMAGE_SIZE, channels],
-            {
-                'boxes': [None, 4],
-                'labels': [None],
-                'masks': [None, IMAGE_SIZE, IMAGE_SIZE]
-            }
-        ),
-        padding_values=(
-            0.0,
-            {
-                'boxes': tf.constant(-1.0, dtype=tf.float32),
-                'labels': tf.constant(-1, dtype=tf.int64),
-                'masks': tf.constant(0, dtype=tf.uint8)
-            }
-        )
-    )
-    return ds
+    ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    return ds.repeat()
 
 def coco_simple_segmentation_dataset(split='train', channels=3):
     if split == 'train':
@@ -204,7 +166,7 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
     output_shapes = ((), (None, 4), (None,), (None, None, None))
     ds = tf.data.Dataset.from_generator(generator, output_types, output_shapes)
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.batch(8).prefetch(tf.data.AUTOTUNE)
+    ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     return ds.repeat()
 
 def coco_cardinality():
