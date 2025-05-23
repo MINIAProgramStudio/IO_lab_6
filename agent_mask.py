@@ -32,6 +32,11 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
+BAD_MODEL_COEFFICIENT = 4 # reduces model size
+BAD_DATASET_COEFFICIENT = 16 # reduces dataset size
+dataset_loader.BATCH_SIZE = 128
+dataset_loader.IMAGE_SIZE = 32
+
 
 def dice_loss(y_true, y_pred, smooth=1e-6):
     # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
@@ -85,7 +90,7 @@ print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 print("Loading MS COCO dataset.")
 coco_train_and_test = dataset_loader.coco_RGB_dataset('train', channels=1)
 coco_val = dataset_loader.coco_RGB_dataset('val', channels=1)
-print("MS COCO loaded. Splitting it into train and test.")
+print("MS COCO loaded.")
 """
 coco_test, coco_train = dflu.split_test_and_train(coco_train_and_test)
 del coco_train_and_test
@@ -94,7 +99,7 @@ print("COCO split completed.")
 print("Some COCO labels:")
 dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
-dflu.first_batch_images(coco_train_and_test)
+#dflu.first_batch_images(coco_train_and_test)
 
 # dflu.first_batch_masks(coco_train_and_test)
 
@@ -106,7 +111,7 @@ for _, masks in coco_train_and_test.take(1):
 for _, masks in coco_val.take(1):
     print("min/max mask IDs:", tf.reduce_min(masks), tf.reduce_max(masks))
 
-BAD_MODEL_COEFFICIENT = 4
+
 
 
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
@@ -159,11 +164,11 @@ model.compile(
 )
 
 history = model.fit(
-    coco_train_and_test.take(1),
-    epochs=1,
-    steps_per_epoch=1,
-    validation_data=coco_val.take(1),
-    validation_steps=1
+    coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
+    epochs=10,
+    steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
+    validation_data=coco_val.take(val_steps//BAD_DATASET_COEFFICIENT),
+    validation_steps=val_steps//BAD_DATASET_COEFFICIENT
 )
 print(history.history.keys())
 model.save("test.keras")
@@ -187,11 +192,31 @@ plt.show()
 #model.evaluate(coco_val, steps=val_steps)
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from collections import Counter
+
+
+# Training set distribution
+train_true_list = []
+for _, masks in tqdm.tqdm(coco_train_and_test.take(train_steps), desc="Training Labels"):
+    flat = tf.reshape(masks, [-1]).numpy()
+    train_true_list.append(flat)
+train_true = np.concatenate(train_true_list)
+print("Training label distribution:", Counter(train_true))
+
+# Validation set distribution
+val_true_list = []
+for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="Validation Labels"):
+    flat = tf.reshape(masks, [-1]).numpy()
+    val_true_list.append(flat)
+val_true = np.concatenate(val_true_list)
+print("Validation label distribution:", Counter(val_true))
+
 
 y_true_list = []
 for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
     flat = tf.reshape(masks, [-1]).numpy()  # shape (batch*H*W,)
     y_true_list.append(flat)
+
 
 y_pred_list = []
 for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc="b"):
