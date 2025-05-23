@@ -81,8 +81,8 @@ class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 print("Loading MS COCO dataset.")
-coco_train_and_test = dataset_loader.coco_simple_segmentation_dataset('train',channels=1)
-coco_val = dataset_loader.coco_simple_segmentation_dataset('val',channels=1)
+coco_train_and_test = dataset_loader.coco_RGB_dataset('train',channels=1)
+coco_val = dataset_loader.coco_RGB_dataset('val',channels=1)
 print("MS COCO loaded. Splitting it into train and test.")
 """
 coco_test, coco_train = dflu.split_test_and_train(coco_train_and_test)
@@ -92,7 +92,7 @@ print("COCO split completed.")
 print("Some COCO labels:")
 dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
-#dflu.first_batch_images(coco_train_and_test)
+dflu.first_batch_images(coco_train_and_test)
 
 #dflu.first_batch_masks(coco_train_and_test)
 
@@ -135,29 +135,17 @@ print("model created")
 model.summary()
 plot_model(model, show_shapes=True)
 
-
-def masked_loss(y_true, y_pred):
-    mask = tf.cast(y_true != 4, tf.float32)
-
-    # Compute the loss with masking
-    loss = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
-    masked_loss = loss * mask
-
-    # Average over non-masked pixels
-    return tf.reduce_sum(masked_loss) / (tf.reduce_sum(mask) + 1e-6)  # Avoid division by zero
-
-
 # Compile the model with the masked loss
 model = create_segmentation_model()
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4, clipnorm=1.0),
-    loss=masked_loss,
+    loss=tf.keras.losses.sparse_categorical_crossentropy,
     metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
 history = model.fit(
     coco_train_and_test,
-    epochs=10,
+    epochs=20,
     steps_per_epoch=train_steps,
     validation_data=coco_val,
     validation_steps=val_steps
@@ -203,7 +191,7 @@ for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc = "b"
 y_true = np.concatenate(y_true_list)
 y_pred = np.concatenate(y_pred_list)
 
-num_classes = len(dflu.coco_rectangular_labels)
+num_classes = len(dflu.coco_rgb_labels)
 y_pred = np.clip(y_pred, 0, num_classes - 1)
 y_true = np.clip(y_true, 0, num_classes - 1)
 
@@ -212,7 +200,7 @@ cm = confusion_matrix(y_true, y_pred)
 
 # Only use labels that appear in either y_true or y_pred
 used_labels = np.unique(np.concatenate([y_true, y_pred]))
-used_label_names = [dflu.coco_merged_mask_labels[i] for i in used_labels]
+used_label_names = [dflu.coco_rgb_labels[i] for i in used_labels]
 
 cm_log = np.log1p(cm)
 
