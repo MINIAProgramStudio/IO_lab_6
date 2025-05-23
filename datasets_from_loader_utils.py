@@ -272,6 +272,8 @@ def first_batch_images(dataset):
         for i, img in enumerate(images):
             axs[i].imshow(img, cmap='gray')
             axs[i].axis('off')
+            if i == 7:
+                break
 
         plt.tight_layout()
         plt.show()
