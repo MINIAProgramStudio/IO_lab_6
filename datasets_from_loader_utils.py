@@ -175,6 +175,26 @@ coco_mask_labels = [
   "wood",           # 90
   "other"           # 91
 ]
+coco_merged_mask_labels = [
+    "background",
+    "green_stuff",
+    "other"
+]
+
+def coco_labels_index_merge(labels):
+    labels = tf.cast(labels, dtype=tf.int32)
+    labels = tf.where(
+        tf.math.reduce_any(tf.equal(labels[:, None], [97, 124, 127, 129, 134, 153, 169, 170]), axis=1),
+        1,  # New class ID
+        labels
+    )
+    labels = tf.where(
+        labels > 1,
+        2,  # New class ID
+        labels
+    )
+    #labels = tf.cast(labels, dtype=tf.int64)
+    return labels
 
 def first_batch_labels(dataset, labels):
     for images, targets in dataset.take(1):
