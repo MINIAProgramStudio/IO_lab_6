@@ -12,7 +12,7 @@ coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
 IMAGE_SIZE = 128
-BATCH_SIZE = 512
+BATCH_SIZE = 128
 COCO_NUM_CLASSES = 5
 
 def load_example(img_data, image_dir, coco):
@@ -180,10 +180,10 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
         img = tf.io.read_file(img_path)
         img = tf.image.decode_jpeg(img, channels=channels)  # Assume RGB
         img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
-        img = tf.cast(img, tf.float32) / 255.0
+        img = tf.cast(img, tf.float16) / 255.0
         labels = dflu.coco_labels_index_merge(labels)
         if tf.shape(masks)[0] == 0:
-            mask = tf.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int64)
+            mask = tf.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int8)
             return img, mask
 
         resized_masks = tf.image.resize(
@@ -191,10 +191,10 @@ def coco_simple_segmentation_dataset(split='train', channels=3):
             (IMAGE_SIZE, IMAGE_SIZE),
             method='nearest'
         )
-        resized_masks = tf.cast(resized_masks[..., 0] > 0.5, tf.int64)
+        resized_masks = tf.cast(resized_masks[..., 0] > 0.5, tf.int8)
 
         expanded_labels = tf.expand_dims(tf.expand_dims(labels, axis=1), axis=2)
-        expanded_labels = tf.cast(expanded_labels, tf.int64)  # Shape: (num_instances, 1, 1)
+        expanded_labels = tf.cast(expanded_labels, tf.int8)  # Shape: (num_instances, 1, 1)
         class_masks = resized_masks * expanded_labels  # Broadcasting to (num_instances, IMAGE_SIZE, IMAGE_SIZE)
         canvas = tf.reduce_max(class_masks, axis=0)  # Shape: (IMAGE_SIZE, IMAGE_SIZE)
 
