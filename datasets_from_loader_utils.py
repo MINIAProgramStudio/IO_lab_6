@@ -1,5 +1,6 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import numpy as np
 coco_rectangular_labels = {0: u'__background__',
  1: u'person',
  2: u'bicycle',
@@ -194,6 +195,19 @@ coco_rgb_labels = [
     "magenta",  # 7: (R + B) / 2 > G
     "gray"      # 8: All other cases
 ]
+
+coco_rgb_colors = np.array([
+    [255, 255, 255],  # light
+    [0, 0, 0],        # dark
+    [255, 0, 0],      # red
+    [0, 255, 0],      # green
+    [0, 0, 255],      # blue
+    [0, 255, 255],    # cyan
+    [255, 255, 0],    # yellow
+    [255, 0, 255],    # magenta
+    [128, 128, 128],  # gray
+])
+
 
 def coco_labels_index_merge(labels):
     labels = tf.cast(labels, dtype=tf.int32)
