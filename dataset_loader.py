@@ -12,7 +12,7 @@ coco_val_img_dir = os.path.join(coco_base_dir, "val2017")
 coco_train_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_train2017.json")
 coco_val_ann_file = os.path.join(coco_base_dir, "stuff_annotations_trainval2017/annotations", "stuff_val2017.json")
 IMAGE_SIZE = 32
-BATCH_SIZE = 256
+BATCH_SIZE = 512
 COCO_NUM_CLASSES = 9
 
 
@@ -60,27 +60,30 @@ def rgb_to_label_map(img):
     mean_rgb = tf.reduce_mean(img, axis=-1)  # Shape: (IMAGE_SIZE, IMAGE_SIZE)
 
     # Define conditions
-    light_condition = mean_rgb > (240 / 255.0)  # Mean > 230/255
+    light_condition = mean_rgb > (230 / 255.0)  # Mean > 230/255
     dark_condition = mean_rgb < (20 / 255.0)  # Mean < 20/255
-    red_condition = (r - mean_rgb) > 0
-    green_condition = (g - mean_rgb) > 0
-    blue_condition = (b - mean_rgb) > 0
-    cyan_condition = (r - mean_rgb) < 0
-    yellow_condition = (b - mean_rgb) < 0
-    magenta_condition = (g - mean_rgb) < 0
+    red_condition = (r*0.9 - mean_rgb) > 0
+    green_condition = (g*0.9 - mean_rgb) > 0
+    blue_condition = (b*0.9 - mean_rgb) > 0
+    cyan_condition = (r*1.1 - mean_rgb) < 0
+    yellow_condition = (b*1.1 - mean_rgb) < 0
+    magenta_condition = (g*1.1 - mean_rgb) < 0
 
     # Initialize label map with "gray" (index 8)
     label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
 
     # Apply conditions in order of precedence
-    label_map = tf.where(light_condition, 0, label_map)  # light
-    label_map = tf.where(dark_condition, 1, label_map)  # dark
-    label_map = tf.where(red_condition, 2, label_map)  # red
-    label_map = tf.where(green_condition, 3, label_map)  # green
-    label_map = tf.where(blue_condition, 4, label_map)  # blue
+    #low priority
     label_map = tf.where(cyan_condition, 5, label_map)  # cyan
     label_map = tf.where(yellow_condition, 6, label_map)  # yellow
     label_map = tf.where(magenta_condition, 7, label_map)  # magenta
+    #medium priority
+    label_map = tf.where(red_condition, 2, label_map)  # red
+    label_map = tf.where(green_condition, 3, label_map)  # green
+    label_map = tf.where(blue_condition, 4, label_map)  # blue
+    #high priority
+    label_map = tf.where(light_condition, 0, label_map)  # light
+    label_map = tf.where(dark_condition, 1, label_map)  # dark
 
     return label_map
 
@@ -105,7 +108,7 @@ def coco_RGB_dataset(split='train', channels=3):
         img = tf.io.read_file(img_path)
         img = tf.image.decode_jpeg(img, channels=3)  # RGB image
         img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
-        img = tf.cast(img, tf.float16) / 255.0  # Normalize to [0, 1]
+        img = tf.cast(img, tf.float32) / 255.0  # Normalize to [0, 1]
 
         # Generate label map from RGB values
         label_map = rgb_to_label_map(img)
