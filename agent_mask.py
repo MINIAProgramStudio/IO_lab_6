@@ -32,6 +32,50 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
+def dice_loss(y_true, y_pred, smooth=1e-6):
+    # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
+    # y_pred: (batch, h, w, c)  — float32 softmax probabilities
+
+    num_classes = tf.shape(y_pred)[-1]
+    y_true_onehot = tf.one_hot(tf.cast(y_true, tf.int32), num_classes)  # (b,h,w,c)
+
+    # Flatten
+    y_true_f = tf.reshape(y_true_onehot, [-1, num_classes])
+    y_pred_f = tf.reshape(y_pred, [-1, num_classes])
+
+    intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=0)
+    union = tf.reduce_sum(y_true_f + y_pred_f, axis=0)
+
+    dice = (2. * intersection + smooth) / (union + smooth)
+    return 1 - tf.reduce_mean(dice)  # mean over all classes
+
+def combined_loss(y_true, y_pred):
+    ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
+    d  = dice_loss(y_true, y_pred)
+    return ce + d
+
+class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
+    def __init__(self, name="SegmentationMeanIoU", *, num_classes, **kwargs):
+        # Ensure `name` is first and `num_classes` is keyword-only
+        super().__init__(num_classes=num_classes, name=name, **kwargs)
+        self.num_classes = num_classes
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        # y_pred comes in as (batch, H, W, C) softmax probabilities.
+        # Convert to (batch, H, W) integer labels before computing IoU.
+        y_pred_labels = tf.argmax(y_pred, axis=-1)
+        return super().update_state(y_true, y_pred_labels, sample_weight)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"num_classes": self.num_classes})
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        # Keras will pass in both 'name' and 'num_classes' here
+        return cls(name=config.get("name"), num_classes=config["num_classes"])
+
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 print("Loading MS COCO dataset.")
@@ -60,69 +104,29 @@ for _, masks in coco_val.take(1):
 
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
     inputs = tf.keras.Input(shape=input_shape)
-    x = tf.keras.layers.Conv2D(32, 7, activation='relu', padding='same')(inputs)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE, (dataset_loader.IMAGE_SIZE//4)*2+1, activation='relu', padding='same')(inputs)
     x = tf.keras.layers.MaxPooling2D()(x)
-    x = tf.keras.layers.Conv2D(64, 7, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE*2, (dataset_loader.IMAGE_SIZE//8)*2+1, activation='relu', padding='same')(x)
     x = tf.keras.layers.MaxPooling2D()(x)
-    x = tf.keras.layers.Conv2D(128, 7, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE*4, (dataset_loader.IMAGE_SIZE//16)*2+1, activation='relu', padding='same')(x)
 
     x = tf.keras.layers.UpSampling2D()(x)
-    x = tf.keras.layers.Conv2D(64, 7, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE*2, 7, activation='relu', padding='same')(x)
     x = tf.keras.layers.UpSampling2D()(x)
-    x = tf.keras.layers.Conv2D(32, 7, activation='relu', padding='same')(x)
+    x = tf.keras.layers.Conv2D(dataset_loader.IMAGE_SIZE, 7, activation='relu', padding='same')(x)
     outputs = tf.keras.layers.Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')(x)
 
     model = tf.keras.Model(inputs, outputs)
     return model
-
+#"""
 model = create_segmentation_model()
 print("model created")
 
 model.summary()
 #plot_model(model, show_shapes=True)
-def dice_loss(y_true, y_pred, smooth=1e-6):
-    # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
-    # y_pred: (batch, h, w, c)  — float32 softmax probabilities
 
-    num_classes = tf.shape(y_pred)[-1]
-    y_true_onehot = tf.one_hot(tf.cast(y_true, tf.int32), num_classes)  # (b,h,w,c)
 
-    # Flatten
-    y_true_f = tf.reshape(y_true_onehot, [-1, num_classes])
-    y_pred_f = tf.reshape(y_pred, [-1, num_classes])
 
-    intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=0)
-    union = tf.reduce_sum(y_true_f + y_pred_f, axis=0)
-
-    dice = (2. * intersection + smooth) / (union + smooth)
-    return 1 - tf.reduce_mean(dice)  # mean over all classes
-
-def combined_loss(y_true, y_pred):
-    ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
-    d  = dice_loss(y_true, y_pred)
-    return ce + d
-
-class SegmentationMeanIoU(tf.keras.metrics.Metric):
-    def __init__(self, num_classes, name="segmentation_miou", **kwargs):
-        super().__init__(name=name, **kwargs)
-        self.num_classes = num_classes
-        self.mean_iou = tf.keras.metrics.MeanIoU(num_classes=num_classes)
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        # Convert logits/probabilities to class predictions
-        y_pred = tf.argmax(y_pred, axis=-1)
-
-        # Flatten the tensors
-        y_true = tf.reshape(y_true, [-1])
-        y_pred = tf.reshape(y_pred, [-1])
-
-        self.mean_iou.update_state(y_true, y_pred)
-
-    def result(self):
-        return self.mean_iou.result()
-
-    def reset_state(self):
-        self.mean_iou.reset_state()
 
 model.compile(optimizer=Adam(learning_rate=1e-4, clipnorm=1.0),
               loss=combined_loss,
@@ -143,8 +147,8 @@ plt.plot(history.history['val_loss'], label = "val_loss")
 plt.legend()
 plt.show()
 
-plt.plot(history.history['segmentation_miou'], label = "segmentation_miou")
-plt.plot(history.history['val_segmentation_miou'], label = "val_segmentation_miou")
+plt.plot(history.history['SegmentationMeanIoU'], label = "SegmentationMeanIoU")
+plt.plot(history.history['val_SegmentationMeanIoU'], label = "val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
 
@@ -152,31 +156,39 @@ plt.plot(history.history['accuracy'], label = "accuracy")
 plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
-
-model.evaluate(coco_train_and_test)
-
-predictions = model.predict(coco_train_and_test)
-
-
-
-#Predict
-y_prediction = model.predict(coco_train_and_test)
-y_prediction = np.argmax(y_prediction, axis=1)
-
+#"""
+#model = tf.keras.models.load_model('test.keras', custom_objects={'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+model.evaluate(coco_train_and_test, steps=train_steps)
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-# 1. Створення Confusion Matrix
-cm = confusion_matrix(coco_train_and_test, y_prediction)
+y_true_list = []
+for _, masks in coco_train_and_test:
+    # masks: (batch, H, W)
+    flat = tf.reshape(masks, [-1]).numpy()         # shape (batch*H*W,)
+    y_true_list.append(flat)
+y_true = np.concatenate(y_true_list, axis=0)       # shape (total_pixels,)
 
-# 2. Відображення без чисел
+# 2) Run model.predict once and flatten predictions
+y_pred_list = []
+for batch_preds in model.predict(coco_train_and_test):
+    # batch_preds: (batch, H, W, num_classes)
+    preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
+    y_pred_list.append(preds_flat)
+y_pred = np.concatenate(y_pred_list, axis=0)       # shape (total_pixels,)
+
+# 3) Compute confusion matrix
+cm = confusion_matrix(y_true, y_pred)
+
+# 4) Display without the numeric labels
 fig, ax = plt.subplots(figsize=(10, 10))
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=dflu.coco_mask_labels)
-disp.plot(include_values=False,  # <- не показувати числа
+disp = ConfusionMatrixDisplay(confusion_matrix=cm,
+                              display_labels=dflu.coco_mask_labels)
+disp.plot(include_values=False,   # hide counts
           xticks_rotation=90,
           cmap='Blues',
           ax=ax)
-plt.title("Confusion Matrix")
+plt.title("Confusion Matrix (no values)")
 plt.grid(False)
 plt.tight_layout()
 plt.show()
