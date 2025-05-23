@@ -183,6 +183,18 @@ coco_merged_mask_labels = [
     "other"
 ]
 
+coco_rgb_labels = [
+    "light",    # 0: Mean of all channels > 230
+    "dark",     # 1: Mean of all channels < 20
+    "red",      # 2: R > G + B
+    "green",    # 3: G > R + B
+    "blue",     # 4: B > R + G
+    "cyan",     # 5: (G + B) / 2 > R
+    "yellow",   # 6: (R + G) / 2 > B
+    "magenta",  # 7: (R + B) / 2 > G
+    "gray"      # 8: All other cases
+]
+
 def coco_labels_index_merge(labels):
     labels = tf.cast(labels, dtype=tf.int32)
     labels = tf.where(
