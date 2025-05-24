@@ -208,6 +208,18 @@ coco_rgb_colors = np.array([
     [128, 128, 128],  # gray
 ])
 
+# coco_hsv_colors = np.array([
+#     [0, 0, 255],      # White
+#     [0, 0, 0],        # Black
+#     [0, 255, 255],    # Red
+#     [60, 255, 255],   # Green
+#     [120, 255, 255],  # Blue
+#     [90, 255, 255],   # Cyan
+#     [30, 255, 255],   # Yellow
+#     [150, 255, 255],  # Magenta
+#     [0, 0, 128]       # Gray
+# ])
+
 
 def coco_labels_index_merge(labels):
     labels = tf.cast(labels, dtype=tf.int32)
@@ -292,7 +304,7 @@ def first_batch_images(dataset):
         plt.tight_layout()
         plt.show()
 
-def first_batch_masks(dataset):
+def first_batch_masks(dataset):  # , rgb=True
     for images, masks in dataset.take(1):  # images: (B, H, W, 3), masks: (B, H, W)
         # Plot up to 8 examples
         batch_size = images.shape[0]
@@ -307,7 +319,20 @@ def first_batch_masks(dataset):
 
             # Corresponding binary mask
             plt.subplot(1, 2, 2)
-            plt.imshow(masks[i])
+            # plt.imshow(masks[i])
+            d3_gray_image = np.concatenate([images[i] for _ in range(3)], axis=-1)
+            # if rgb:
+            d3_mask = coco_rgb_colors[masks[i]]
+            image_with_mask = d3_gray_image * (d3_mask / 255)
+            # else:
+            #     d3_mask = coco_hsv_colors[masks[i]]
+            #     image_with_mask = np.zeros_like(d3_gray_image)
+            #     diff = 0
+            #     lst = [0, 1, 2]
+            #     lst.pop(diff)
+            #     image_with_mask[:, :, diff] = d3_gray_image[:, :, diff] * (d3_mask[:, :, diff] / 180)
+            #     image_with_mask[..., lst] = d3_gray_image[..., lst] * (d3_mask[..., lst] / 255)
+            plt.imshow(image_with_mask)
             plt.title("Mask")
             plt.axis('off')
 
