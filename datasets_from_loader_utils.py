@@ -221,6 +221,13 @@ coco_rgb_colors = np.array([
 # ])
 
 
+def apply_mask_to_image(image, mask):
+    d3_gray_image = np.concatenate([image[..., None] for _ in range(3)], axis=-1)
+    d3_mask = coco_rgb_colors[mask]
+    image_with_mask = d3_gray_image * (d3_mask / 255)
+    return image_with_mask.astype(np.uint8)
+
+
 def coco_labels_index_merge(labels):
     labels = tf.cast(labels, dtype=tf.int32)
     labels = tf.where(
