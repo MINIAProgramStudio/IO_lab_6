@@ -32,10 +32,11 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 4 # reduces model size
-BAD_DATASET_COEFFICIENT = 16 # reduces dataset size
+BAD_MODEL_COEFFICIENT = 6 # reduces model size
+BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
 dataset_loader.BATCH_SIZE = 128
-dataset_loader.IMAGE_SIZE = 32
+dataset_loader.IMAGE_SIZE = 128
+EPOCHS = 1
 
 
 def dice_loss(y_true, y_pred, smooth=1e-6):
@@ -148,7 +149,7 @@ def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_lo
     return model
 
 
-# """
+
 model = create_segmentation_model()
 print("model created")
 
@@ -159,20 +160,29 @@ plot_model(model, show_shapes=True)
 model = create_segmentation_model()
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4, clipnorm=1.0),
-    loss=tf.keras.losses.sparse_categorical_crossentropy,
+    loss=dice_loss,
     metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-history = model.fit(
-    coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
-    epochs=10,
-    steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
-    validation_data=coco_val.take(val_steps//BAD_DATASET_COEFFICIENT),
-    validation_steps=val_steps//BAD_DATASET_COEFFICIENT
-)
+model.save("models/night_0.keras")
+counter = 0
+while counter < 200:
+    model = tf.keras.models.load_model(f'models/night_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+    history = model.fit(
+        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
+        epochs=EPOCHS,
+        steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
+        validation_data=coco_val.take(val_steps//BAD_DATASET_COEFFICIENT),
+        validation_steps=val_steps//BAD_DATASET_COEFFICIENT
+    )
+    counter += EPOCHS
+    model.save(f"models/night_{counter}.keras")
+    if np.mean(history.history['val_loss']) - np.mean(history.history['loss']) > 0.075:
+        break
+    if np.mean(history.history['SegmentationMeanIoU']) - np.mean(history.history['val_SegmentationMeanIoU']) < 0.05:
+        break
 print(history.history.keys())
-model.save("test.keras")
-
+model.save("night.keras")
 plt.plot(history.history['loss'], label="loss")
 plt.plot(history.history['val_loss'], label="val_loss")
 plt.legend()
@@ -182,19 +192,18 @@ plt.plot(history.history['SegmentationMeanIoU'], label="SegmentationMeanIoU")
 plt.plot(history.history['val_SegmentationMeanIoU'], label="val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
-"""
+
 plt.plot(history.history['accuracy'], label = "accuracy")
 plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
-"""
-# model = tf.keras.models.load_model('test.keras', custom_objects={'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
-#model.evaluate(coco_val, steps=val_steps)
+#"""
+
+model.evaluate(coco_val, steps=val_steps)
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-from collections import Counter
 
-
+"""
 # Training set distribution
 train_true_list = []
 for _, masks in tqdm.tqdm(coco_train_and_test.take(train_steps), desc="Training Labels"):
@@ -210,7 +219,7 @@ for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="Validation Labels"):
     val_true_list.append(flat)
 val_true = np.concatenate(val_true_list)
 print("Validation label distribution:", Counter(val_true))
-
+"""
 
 y_true_list = []
 for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
