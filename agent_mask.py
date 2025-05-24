@@ -32,12 +32,12 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 6 # reduces model size
+BAD_MODEL_COEFFICIENT = 8 # reduces model size
 BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
-dataset_loader.BATCH_SIZE = 128
+dataset_loader.BATCH_SIZE = 1024
 dataset_loader.IMAGE_SIZE = 128
 EPOCHS = 1
-
+#tf.debugging.set_log_device_placement(True)
 
 def dice_loss(y_true, y_pred, smooth=1e-6):
     # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
