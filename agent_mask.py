@@ -32,11 +32,11 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 8 # reduces model size
+BAD_MODEL_COEFFICIENT = 32 # reduces model size
 BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
 dataset_loader.BATCH_SIZE = 1024
 dataset_loader.IMAGE_SIZE = 128
-EPOCHS = 1
+EPOCHS = 5
 #tf.debugging.set_log_device_placement(True)
 
 def dice_loss(y_true, y_pred, smooth=1e-6):
@@ -63,34 +63,68 @@ def combined_loss(y_true, y_pred):
     return ce + d
 
 
+import tensorflow as tf
+
 class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
-    def __init__(self, name="SegmentationMeanIoU", *, num_classes, **kwargs):
-        # Ensure `name` is first and `num_classes` is keyword-only
+    def __init__(self, name="SegmentationMeanIoU", *, num_classes, image_size=dataset_loader.IMAGE_SIZE, **kwargs):
+        # Filter out image_size from kwargs to avoid passing it to MeanIoU
+        kwargs.pop('image_size', None)
         super().__init__(num_classes=num_classes, name=name, **kwargs)
         self.num_classes = num_classes
+        self.image_size = image_size
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        # y_pred comes in as (batch, H, W, C) softmax probabilities.
-        # Convert to (batch, H, W) integer labels before computing IoU.
+        y_true = tf.cast(y_true, tf.int32)
+        y_true = tf.ensure_shape(y_true, [None, self.image_size, self.image_size])
         y_pred_labels = tf.argmax(y_pred, axis=-1)
+        y_pred_labels = tf.ensure_shape(y_pred_labels, [None, self.image_size, self.image_size])
         return super().update_state(y_true, y_pred_labels, sample_weight)
 
     def get_config(self):
         config = super().get_config()
-        config.update({"num_classes": self.num_classes})
+        config.update({
+            "num_classes": self.num_classes,
+            "image_size": self.image_size
+        })
         return config
 
     @classmethod
     def from_config(cls, config):
-        # Keras will pass in both 'name' and 'num_classes' here
-        return cls(name=config.get("name"), num_classes=config["num_classes"])
+        return cls(
+            name=config.get("name", "SegmentationMeanIoU"),
+            num_classes=config["num_classes"],
+            image_size=config.get("image_size", 128)
+        )
 
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+"""
+coco_train_and_test = dataset_loader.coco_RGB_dataset_precomputed('train', channels=1)
+coco_val = dataset_loader.coco_RGB_dataset_precomputed('val', channels=1)
 
-print("Loading MS COCO dataset.")
-coco_train_and_test = dataset_loader.coco_RGB_dataset('train', channels=1)
-coco_val = dataset_loader.coco_RGB_dataset('val', channels=1)
+print("precomputing train")
+train_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
+    split='train',
+    train_img_dir=dataset_loader.coco_train_img_dir,
+    channels=1  # Set to 1 for grayscale
+)
+print("precomputing val")
+val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
+    split='val',
+    val_img_dir=dataset_loader.coco_val_img_dir,
+    channels=1  # Set to 1 for grayscale
+)"""
+print("creating datasets")
+# Create datasets
+coco_train_and_test = dataset_loader.coco_RGB_dataset_precomputed(
+    split='train',
+    channels=1
+)
+
+coco_val = dataset_loader.coco_RGB_dataset_precomputed(
+    split='val',
+channels=1
+)
 print("MS COCO loaded.")
 """
 coco_test, coco_train = dflu.split_test_and_train(coco_train_and_test)
@@ -164,28 +198,35 @@ model.compile(
     metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-model.save("models/night_0.keras")
+model.save("models/precompv1_0.keras")
 counter = 0
-while counter < 200:
-    model = tf.keras.models.load_model(f'models/night_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+loss_list = []
+val_loss_list = []
+SMIoU_list = []
+val_SMIoU_list = []
+while counter < 500:
+    model = tf.keras.models.load_model(f'models/precompv1_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
     history = model.fit(
-        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
+        coco_train_and_test,
         epochs=EPOCHS,
-        steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
-        validation_data=coco_val.take(val_steps//BAD_DATASET_COEFFICIENT),
-        validation_steps=val_steps//BAD_DATASET_COEFFICIENT
+        steps_per_epoch=train_steps,
+        validation_data=coco_val,
+        validation_steps=val_steps
     )
     counter += EPOCHS
-    model.save(f"models/night_{counter}.keras")
-print(history.history.keys())
+    model.save(f"models/precompv1_{counter}.keras")
+    loss_list.append(np.mean(history.history['loss']))
+    val_loss_list.append(np.mean(history.history['val_loss']))
+    val_SMIoU_list.append(np.mean(history.history['val_SegmentationMeanIoU']))
+    SMIoU_list.append(np.mean(history.history['SegmentationMeanIoU']))
 model.save("night.keras")
-plt.plot(history.history['loss'], label="loss")
-plt.plot(history.history['val_loss'], label="val_loss")
+plt.plot(np.linspace(0, counter, counter//EPOCHS),loss_list, label="loss")
+plt.plot(np.linspace(0, counter, counter//EPOCHS), val_loss_list, label="val_loss")
 plt.legend()
 plt.show()
 
-plt.plot(history.history['SegmentationMeanIoU'], label="SegmentationMeanIoU")
-plt.plot(history.history['val_SegmentationMeanIoU'], label="val_SegmentationMeanIoU")
+plt.plot(np.linspace(0, counter, counter//EPOCHS), SMIoU_list, label="SegmentationMeanIoU")
+plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
 """
