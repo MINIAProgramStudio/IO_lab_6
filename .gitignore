@@ -6,3 +6,4 @@ __pycache__/dataset_loader.cpython-310.pyc
 __pycache__/datasets_from_loader_utils.cpython-310.pyc
 *.keras
 logs
+*.tfrecord
