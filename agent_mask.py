@@ -32,10 +32,10 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 16 # reduces model size
-BAD_DATASET_COEFFICIENT = 30 # reduces dataset size
-dataset_loader.BATCH_SIZE = 32
-dataset_loader.IMAGE_SIZE = 128
+BAD_MODEL_COEFFICIENT = 1 # reduces model size
+BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
+dataset_loader.BATCH_SIZE = 128
+dataset_loader.IMAGE_SIZE = 32
 EPOCHS = 10
 #tf.debugging.set_log_device_placement(True)
 
@@ -63,7 +63,7 @@ def combined_loss(y_true, y_pred):
     return ce + d
 
 
-import tensorflow as tf
+
 
 class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
     def __init__(self, name="SegmentationMeanIoU", *, num_classes, image_size=dataset_loader.IMAGE_SIZE, **kwargs):
@@ -99,31 +99,33 @@ class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 """
-coco_train_and_test = dataset_loader.coco_RGB_dataset_precomputed('train', channels=1)
-coco_val = dataset_loader.coco_RGB_dataset_precomputed('val', channels=1)
-
 print("precomputing train")
 train_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='train',
     train_img_dir=dataset_loader.coco_train_img_dir,
-    channels=1  # Set to 1 for grayscale
+    channels=1,
+    output_tfrecord_path="FAILSAFE.tfrecord"
 )
+
 print("precomputing val")
 val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='val',
     val_img_dir=dataset_loader.coco_val_img_dir,
-    channels=1  # Set to 1 for grayscale
+    channels=1,
+    output_tfrecord_path="FAILSAFE.tfrecord"
 )"""
 print("creating datasets")
 # Create datasets
 coco_train_and_test = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
-    channels=1
+    channels=1,
+    tfrecord_path="train_32.tfrecord"
 )
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
-channels=1
+    channels=1,
+    tfrecord_path="val_32.tfrecord"
 )
 print("MS COCO loaded.")
 """
@@ -193,34 +195,33 @@ plot_model(model, show_shapes=True)
 # Compile the model with the masked loss
 model = create_segmentation_model()
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4, clipnorm=1.0),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     loss=dice_loss,
     metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-model.save("models/stv1_0.keras")
+model.save("models/st32_0.keras")
 counter = 0
 loss_list = []
 val_loss_list = []
 SMIoU_list = []
 val_SMIoU_list = []
-while counter < 500:
+while counter < 100:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/stv1_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+    model = tf.keras.models.load_model(f'models/st32_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
     history = model.fit(
-        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
+        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT).cache(),
         epochs=EPOCHS,
         steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
-        validation_data=coco_val.take(train_steps//BAD_DATASET_COEFFICIENT),
+        validation_data=coco_val.take(train_steps//BAD_DATASET_COEFFICIENT).cache(),
         validation_steps=val_steps//BAD_DATASET_COEFFICIENT
     )
     counter += EPOCHS
-    model.save(f"models/stv1_{counter}.keras")
+    model.save(f"models/st32_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
     val_loss_list.append(np.mean(history.history['val_loss']))
     val_SMIoU_list.append(np.mean(history.history['val_SegmentationMeanIoU']))
     SMIoU_list.append(np.mean(history.history['SegmentationMeanIoU']))
-model.save("night.keras")
 plt.plot(np.linspace(0, counter, counter//EPOCHS),loss_list, label="loss")
 plt.plot(np.linspace(0, counter, counter//EPOCHS), val_loss_list, label="val_loss")
 plt.legend()
@@ -230,14 +231,14 @@ plt.plot(np.linspace(0, counter, counter//EPOCHS), SMIoU_list, label="Segmentati
 plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
-
 """
+
 plt.plot(history.history['accuracy'], label = "accuracy")
 plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
-
-model = tf.keras.models.load_model('models/precompv2_50.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+""""""
+model = tf.keras.models.load_model('models/st32_20.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
 print("model loaded")
 """
 model.evaluate(coco_val.take(val_steps), steps=val_steps)
