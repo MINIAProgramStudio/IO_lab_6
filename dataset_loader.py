@@ -180,13 +180,13 @@ def rgb_to_label_map(img):
         label_map = tf.where(cond, label, label_map)
     return label_map
 
-def coco_RGB_dataset_precomputed(split='train', channels=3, tfrecord_path=None, batch_size=32, image_size=128):
+def coco_RGB_dataset_precomputed(split='train', channels=3, tfrecord_path=None):
     if tfrecord_path is None:
         tfrecord_path = 'image_mask_train.tfrecord' if split == 'train' else 'image_mask_val.tfrecord'
     ds = tf.data.TFRecordDataset(tfrecord_path)
     ds = ds.map(lambda x: parse_tfrecord_image_and_mask(x, channels=channels),
                 num_parallel_calls=tf.data.AUTOTUNE)
-    ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     return ds.repeat()
 
 
