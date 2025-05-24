@@ -32,9 +32,9 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 1 # reduces model size
-BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
-dataset_loader.BATCH_SIZE = 1024
+BAD_MODEL_COEFFICIENT = 16 # reduces model size
+BAD_DATASET_COEFFICIENT = 30 # reduces dataset size
+dataset_loader.BATCH_SIZE = 32
 dataset_loader.IMAGE_SIZE = 128
 EPOCHS = 10
 #tf.debugging.set_log_device_placement(True)
@@ -183,7 +183,7 @@ def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_lo
     return model
 
 
-"""
+
 model = create_segmentation_model()
 print("model created")
 
@@ -198,23 +198,24 @@ model.compile(
     metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-model.save("models/precompv3_0.keras")
+model.save("models/stv1_0.keras")
 counter = 0
 loss_list = []
 val_loss_list = []
 SMIoU_list = []
 val_SMIoU_list = []
-while counter < 100:
-    model = tf.keras.models.load_model(f'models/precompv3_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+while counter < 500:
+    tf.keras.backend.clear_session()
+    model = tf.keras.models.load_model(f'models/stv1_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
     history = model.fit(
-        coco_train_and_test,
+        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
         epochs=EPOCHS,
-        steps_per_epoch=train_steps,
-        validation_data=coco_val,
-        validation_steps=val_steps
+        steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
+        validation_data=coco_val.take(train_steps//BAD_DATASET_COEFFICIENT),
+        validation_steps=val_steps//BAD_DATASET_COEFFICIENT
     )
     counter += EPOCHS
-    model.save(f"models/precompv3_{counter}.keras")
+    model.save(f"models/stv1_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
     val_loss_list.append(np.mean(history.history['val_loss']))
     val_SMIoU_list.append(np.mean(history.history['val_SegmentationMeanIoU']))
@@ -229,15 +230,18 @@ plt.plot(np.linspace(0, counter, counter//EPOCHS), SMIoU_list, label="Segmentati
 plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
-"""
+
 """
 plt.plot(history.history['accuracy'], label = "accuracy")
 plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
+
+model = tf.keras.models.load_model('models/precompv2_50.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+print("model loaded")
 """
-model = tf.keras.models.load_model('models/precompv3_60.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
-model.evaluate(coco_val, steps=val_steps)
+model.evaluate(coco_val.take(val_steps), steps=val_steps)
+print("model evaluated")
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
