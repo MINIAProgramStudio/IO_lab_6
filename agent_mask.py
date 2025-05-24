@@ -32,7 +32,7 @@ import numpy as np
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 1 # reduces model size
+BAD_MODEL_COEFFICIENT = 4 # reduces model size
 BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
 dataset_loader.BATCH_SIZE = 128
 dataset_loader.IMAGE_SIZE = 32
@@ -200,24 +200,24 @@ model.compile(
     metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-model.save("models/st32_0.keras")
+model.save("models/st32_small_0.keras")
 counter = 0
 loss_list = []
 val_loss_list = []
 SMIoU_list = []
 val_SMIoU_list = []
-while counter < 100:
+while counter < 30:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/st32_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+    model = tf.keras.models.load_model(f'models/st32_small_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
     history = model.fit(
-        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT).cache(),
+        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
         epochs=EPOCHS,
         steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
-        validation_data=coco_val.take(train_steps//BAD_DATASET_COEFFICIENT).cache(),
+        validation_data=coco_val.take(train_steps//BAD_DATASET_COEFFICIENT),
         validation_steps=val_steps//BAD_DATASET_COEFFICIENT
     )
     counter += EPOCHS
-    model.save(f"models/st32_{counter}.keras")
+    model.save(f"models/st32_small_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
     val_loss_list.append(np.mean(history.history['val_loss']))
     val_SMIoU_list.append(np.mean(history.history['val_SegmentationMeanIoU']))
