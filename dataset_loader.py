@@ -16,85 +16,200 @@ BATCH_SIZE = 512
 COCO_NUM_CLASSES = 9
 
 
-def load_example(img_data, image_dir, coco):
-    # get original image dimensions
-    img_h = img_data['height']
-    img_w = img_data['width']
+def _bytes_feature(value):
+    """Returns a bytes_list from a string / byte."""
+    if isinstance(value, type(tf.constant(0))):
+        value = value.numpy()  # Convert tensor to bytes
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-    img_path = os.path.join(image_dir, img_data['file_name'])
-    ann_ids = coco.getAnnIds(imgIds=img_data['id'], iscrowd=False)
-    anns = coco.loadAnns(ann_ids)
 
-    boxes, labels, masks = [], [], []
-    for ann in anns:
-        # normalize bbox using img_h and img_w
-        x, y, w, h = ann['bbox']
-        boxes.append([
-            y / img_h,
-            x / img_w,
-            (y + h) / img_h,
-            (x + w) / img_w
-        ])
-        labels.append(ann['category_id'])
+def _float_list_feature(value):
+    """Returns a float_list from a float / double."""
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
-        # build mask of shape (img_h, img_w)
-        mask = coco.annToMask(ann)
-        masks.append(mask)
 
-    # convert to numpy, ensuring the right shapes
-    boxes = np.array(boxes, dtype=np.float32).reshape(-1, 4)
-    labels = np.array(labels, dtype=np.int64).reshape(-1)
-    if masks:
-        masks = np.stack(masks, axis=0)  # -> (N, img_h, img_w)
+def _int64_list_feature(value):
+    """Returns an int64_list from a bool / enum / int / uint."""
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+
+
+def write_tfrecord_for_images_and_masks(image_dir, output_tfrecord_path, channels=3):
+    img_files = [f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.jpeg'))]
+    with tf.io.TFRecordWriter(output_tfrecord_path) as writer:
+        for img_file in img_files:
+            img_path = os.path.join(image_dir, img_file)
+            img = tf.io.read_file(img_path)
+            img = tf.image.decode_jpeg(img, channels=3)
+            img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
+            img = tf.cast(img, tf.float32) / 255.0
+            label_map = rgb_to_label_map(img)
+            if channels == 1:
+                img = tf.image.rgb_to_grayscale(img)
+
+            # Ensure shapes
+            img = tf.ensure_shape(img, [IMAGE_SIZE, IMAGE_SIZE, channels])
+            label_map = tf.ensure_shape(label_map, [IMAGE_SIZE, IMAGE_SIZE])
+
+            feature = {
+                'img_path': _bytes_feature(img_path.encode('utf-8')),
+                'image': _bytes_feature(tf.io.serialize_tensor(img).numpy()),
+                'label_map': _bytes_feature(tf.io.serialize_tensor(label_map).numpy())
+            }
+            example = tf.train.Example(features=tf.train.Features(feature=feature))
+            writer.write(example.SerializeToString())
+
+
+def parse_tfrecord_image_and_mask(serialized_example, channels=3):
+    feature_description = {
+        'img_path': tf.io.FixedLenFeature([], tf.string),
+        'image': tf.io.FixedLenFeature([], tf.string),
+        'label_map': tf.io.FixedLenFeature([], tf.string)
+    }
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    img = tf.io.parse_tensor(example['image'], out_type=tf.float32)
+    label_map = tf.io.parse_tensor(example['label_map'], out_type=tf.int32)
+
+    # Explicitly set shapes
+    img.set_shape([IMAGE_SIZE, IMAGE_SIZE, channels])
+    label_map.set_shape([IMAGE_SIZE, IMAGE_SIZE])
+
+    return img, label_map
+
+
+def parse_tfrecord_rgb_mask(serialized_example):
+    """
+    Parse a single TFRecord example into img_path and label_map.
+
+    Returns:
+        img_path, label_map
+    """
+    feature_description = {
+        'img_path': tf.io.FixedLenFeature([], tf.string),
+        'label_map': tf.io.FixedLenFeature([], tf.string)
+    }
+
+    example = tf.io.parse_single_example(serialized_example, feature_description)
+    img_path = example['img_path']
+    label_map = tf.io.parse_tensor(example['label_map'], out_type=tf.int32)
+
+    return img_path, label_map
+
+def precompute_image_and_mask_dataset(split='train', train_img_dir=None, val_img_dir=None,
+                                      output_tfrecord_path=None, channels=3):
+    """
+    Precompute resized/grayscaled images and RGB-based label maps for the dataset, save to TFRecord.
+
+    Args:
+        split: 'train' or 'val' to select dataset split.
+        train_img_dir: Directory with training images.
+        val_img_dir: Directory with validation images.
+        output_tfrecord_path: Path to save the TFRecord file.
+        image_size: Target image size for resizing.
+        channels: Number of channels (1 for grayscale, 3 for RGB).
+
+    Returns:
+        Path to the generated TFRecord file.
+    """
+    if split == 'train':
+        img_dir = train_img_dir
+        tfrecord_path = output_tfrecord_path or 'image_mask_train.tfrecord'
     else:
-        masks = np.zeros((0, img_h, img_w), dtype=np.uint8)
+        img_dir = val_img_dir
+        tfrecord_path = output_tfrecord_path or 'image_mask_val.tfrecord'
 
-    return img_path, boxes, labels, masks
+    write_tfrecord_for_images_and_masks(img_dir, tfrecord_path, channels)
+    return tfrecord_path
+
+
+def precompute_rgb_mask_dataset(split='train', channels=3, tfrecord_path=None):
+    """
+    Create a TensorFlow dataset from precomputed TFRecords containing RGB-based label maps.
+
+    Args:
+        split: 'train' or 'val' to select dataset split.
+        channels: Number of image channels (1 for grayscale, 3 for RGB).
+        tfrecord_path: Path to the precomputed TFRecord file.
+        batch_size: Batch size for the dataset.
+        image_size: Target image size for resizing.
+
+    Returns:
+        A tf.data.Dataset yielding (img, label_map) pairs.
+    """
+    if tfrecord_path is None:
+        tfrecord_path = 'rgb_train.tfrecord' if split == 'train' else 'rgb_val.tfrecord'
+
+    def preprocess(img_path, label_map):
+        # Load and prep image
+        img = tf.io.read_file(img_path)
+        img = tf.image.decode_jpeg(img, channels=3)  # RGB image
+        img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
+        img = tf.cast(img, tf.float32) / 255.0  # Normalize to [0, 1]
+
+        if channels == 1:
+            img = tf.image.rgb_to_grayscale(img)
+
+        return img, label_map
+
+    # Load TFRecord dataset
+    ds = tf.data.TFRecordDataset(tfrecord_path)
+    ds = ds.map(parse_tfrecord_rgb_mask, num_parallel_calls=tf.data.AUTOTUNE)
+    ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+    ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+    return ds.repeat()
 
 
 def rgb_to_label_map(img):
-    # Extract R, G, B channels
     r, g, b = img[..., 0], img[..., 1], img[..., 2]
+    mean_rgb = tf.reduce_mean(img, axis=-1)
 
-    # Compute mean of all channels
-    mean_rgb = tf.reduce_mean(img, axis=-1)  # Shape: (IMAGE_SIZE, IMAGE_SIZE)
+    # Define all conditions in one go
+    conditions = [
+        mean_rgb > (230 / 255.0),  # light
+        mean_rgb < (20 / 255.0),  # dark
+        (r * 0.7 - mean_rgb) > 0,  # red
+        (g * 0.7 - mean_rgb) > 0,  # green
+        (b * 0.75 - mean_rgb) > 0,  # blue
+        (r * 1.12 - mean_rgb) < 0,  # cyan
+        (b * 1.265 - mean_rgb) < 0,  # yellow
+        (g * 1.14 - mean_rgb) < 0  # magenta
+    ]
+    labels = [0, 1, 2, 3, 4, 5, 6, 7]
 
-    # Define conditions
-    light_condition = mean_rgb > (230 / 255.0)  # Mean > 230/255
-    dark_condition = mean_rgb < (20 / 255.0)  # Mean < 20/255
-    red_condition = (r*0.7 - mean_rgb) > 0
-    green_condition = (g*0.7 - mean_rgb) > 0
-    blue_condition = (b*0.75 - mean_rgb) > 0
-    cyan_condition = (r*1.12 - mean_rgb) < 0
-    yellow_condition = (b*1.265 - mean_rgb) < 0
-    magenta_condition = (g*1.14 - mean_rgb) < 0
-
-    # Initialize label map with "gray" (index 8)
     label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
-
-    # Apply conditions in order of precedence
-    #low priority
-    label_map = tf.where(cyan_condition, 5, label_map)  # cyan
-    label_map = tf.where(yellow_condition, 6, label_map)  # yellow
-    label_map = tf.where(magenta_condition, 7, label_map)  # magenta
-    #medium priority
-    label_map = tf.where(red_condition, 2, label_map)  # red
-    label_map = tf.where(green_condition, 3, label_map)  # green
-    label_map = tf.where(blue_condition, 4, label_map)  # blue
-    #high priority
-    label_map = tf.where(light_condition, 0, label_map)  # light
-    label_map = tf.where(dark_condition, 1, label_map)  # dark
-
+    for cond, label in zip(conditions[::-1], labels[::-1]):  # Reverse for precedence
+        label_map = tf.where(cond, label, label_map)
     return label_map
 
+def coco_RGB_dataset_precomputed(split='train', channels=3, tfrecord_path=None, batch_size=32, image_size=128):
+    if tfrecord_path is None:
+        tfrecord_path = 'image_mask_train.tfrecord' if split == 'train' else 'image_mask_val.tfrecord'
+    ds = tf.data.TFRecordDataset(tfrecord_path)
+    ds = ds.map(lambda x: parse_tfrecord_image_and_mask(x, channels=channels),
+                num_parallel_calls=tf.data.AUTOTUNE)
+    ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    return ds.repeat()
+
+
+RGB_train_coco_instance = None
+RGB_val_coco_instance = None
 
 def coco_RGB_dataset(split='train', channels=3):
+    global RGB_train_coco_instance
+    global RGB_val_coco_instance
     if split == 'train':
-        coco = COCO(coco_train_ann_file)
-        img_dir = coco_train_img_dir
+        if RGB_train_coco_instance is None:
+            coco = COCO(coco_train_ann_file)
+            img_dir = coco_train_img_dir
+            RGB_train_coco_instance = coco
+        else:
+            coco = RGB_train_coco_instance
     else:
-        coco = COCO(coco_val_ann_file)
-        img_dir = coco_val_img_dir
+        if RGB_val_coco_instance is None:
+            coco = COCO(coco_val_ann_file)
+            img_dir = coco_val_img_dir
+            RGB_val_coco_instance = coco
+        else:
+            coco = RGB_val_coco_instance
 
     img_ids = coco.getImgIds()
     img_files = coco.loadImgs(img_ids)
@@ -122,7 +237,27 @@ def coco_RGB_dataset(split='train', channels=3):
 
     output_types = (tf.string, tf.float32, tf.int64, tf.uint8)
     output_shapes = ((), (None, 4), (None,), (None, None, None))
-    ds = tf.data.Dataset.from_generator(generator, output_types, output_shapes)
+
+    def write_tfrecord(img_data, img_dir, coco, writer):
+        img_path, boxes, labels, masks = load_example(img_data, img_dir, coco)
+        # Serialize to TFRecord (example serialization)
+        feature = {
+            'img_path': tf.train.Feature(bytes_list=tf.train.BytesList(value=[img_path.encode()])),
+            'boxes': tf.train.Feature(float_list=tf.train.FloatList(value=boxes.flatten())),
+            'labels': tf.train.Feature(int64_list=tf.train.Int64List(value=labels)),
+            'masks': tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.io.serialize_tensor(masks).numpy()]))
+        }
+        example = tf.train.Example(features=tf.train.Features(feature=feature))
+        writer.write(example.SerializeToString())
+
+    # Write TFRecords
+    with tf.io.TFRecordWriter('dataset.tfrecord') as writer:
+        for img_data in img_files:
+            write_tfrecord(img_data, img_dir, coco, writer)
+
+    # Load dataset
+    ds = tf.data.TFRecordDataset('dataset.tfrecord')
+    ds = ds.map(parse_tfrecord, num_parallel_calls=tf.data.AUTOTUNE)  # Define parse_tfrecord
     ds = ds.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
     ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     return ds.repeat()
