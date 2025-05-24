@@ -177,10 +177,6 @@ while counter < 200:
     )
     counter += EPOCHS
     model.save(f"models/night_{counter}.keras")
-    if np.mean(history.history['val_loss']) - np.mean(history.history['loss']) > 0.075:
-        break
-    if np.mean(history.history['SegmentationMeanIoU']) - np.mean(history.history['val_SegmentationMeanIoU']) < 0.05:
-        break
 print(history.history.keys())
 model.save("night.keras")
 plt.plot(history.history['loss'], label="loss")
@@ -192,12 +188,12 @@ plt.plot(history.history['SegmentationMeanIoU'], label="SegmentationMeanIoU")
 plt.plot(history.history['val_SegmentationMeanIoU'], label="val_SegmentationMeanIoU")
 plt.legend()
 plt.show()
-
+"""
 plt.plot(history.history['accuracy'], label = "accuracy")
 plt.plot(history.history['val_accuracy'], label = "val_accuracy")
 plt.legend()
 plt.show()
-#"""
+"""
 
 model.evaluate(coco_val, steps=val_steps)
 
