@@ -248,7 +248,7 @@ model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=3e-4),
     loss=weighted_sparse_categorical_crossentropy,
     #metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES), TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
-metrics=[WeightedMeanIoU(TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
+    metrics=[WeightedMeanIoU(TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
 )
 
 model.save("models/max128_7_0.keras")
