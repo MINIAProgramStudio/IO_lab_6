@@ -1,5 +1,12 @@
 from logging import WARNING
+import os
 
+from keras.metrics import SparseCategoricalAccuracy
+
+os.environ["TF_CUDA_HOME"] = "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.2"
+os.environ["XLA_FLAGS"] = '--xla_gpu_cuda_data_dir="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.2"'
+import shutil
+print(shutil.which("ptxas"))
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
@@ -28,21 +35,24 @@ import keras
 from pycocotools.coco import COCO
 from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_dataset
 
-from some_functions import weighted_combined_loss, WeightedMeanIoU
+from some_functions import *
 
 import numpy as np
 
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 2 # reduces model size
-BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
-dataset_loader.BATCH_SIZE = 128
+BAD_MODEL_COEFFICIENT = 1 # reduces model size
+STEPS_PER_EPOCH = 10
+BATCH_SIZE = 2**10
 dataset_loader.IMAGE_SIZE = 128
-EPOCHS = 3
+EPOCHS = 20
+TOTAL_EPOCHS = 200
 #tf.debugging.set_log_device_placement(True)
 
-
+from tensorflow.keras.mixed_precision import set_global_policy
+set_global_policy('mixed_float16')
+tf.config.optimizer.set_jit(True)
 
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
@@ -65,17 +75,17 @@ val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
 print("creating datasets")
 # Create datasets
 train_steps, val_steps = dataset_loader.coco_cardinality()
-coco_train_and_test = dataset_loader.coco_RGB_dataset_precomputed(
+coco_train = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
     tfrecord_path="image_mask_train.tfrecord"
-).take(train_steps//BAD_DATASET_COEFFICIENT)
+)
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
     tfrecord_path="image_mask_val.tfrecord"
-).take(val_steps//BAD_DATASET_COEFFICIENT)
+)
 print("MS COCO loaded.")
 """
 coco_test, coco_train = dflu.split_test_and_train(coco_train_and_test)
@@ -91,7 +101,7 @@ dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
 
 
-for _, masks in coco_train_and_test.take(1):
+for _, masks in coco_train.take(1):
     print("min/max mask IDs:", tf.reduce_min(masks), tf.reduce_max(masks))
 
 for _, masks in coco_val.take(1):
@@ -136,17 +146,19 @@ def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_lo
 
 tf.keras.backend.clear_session()
 #model = create_segmentation_model()
+KERNEL_SIZE = 7
+
 model = tf.keras.models.Sequential(
     [
         Input(shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)),
         # layers.Lambda(lambda x: tf.expand_dims(x, axis=-1)),
 
-        Conv2D(128, (3, 3), activation='relu', padding='same'),
+        Conv2D(128, (KERNEL_SIZE*3, KERNEL_SIZE*3), activation='relu', padding='same'),
         BatchNormalization(),
         MaxPooling2D(4, 4),
 
         # layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
-        Conv2D(256, (3, 3), activation='relu', padding='same'),
+        Conv2D(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
         MaxPooling2D(4, 4),
 
@@ -162,17 +174,69 @@ model = tf.keras.models.Sequential(
 
         UpSampling2D(4),
         # layers.Conv2DTranspose(256, (3, 3), activation='relu', padding='same'),
-        Conv2DTranspose(128, (3, 3), activation='relu', padding='same'),
+        Conv2DTranspose(128, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
 
         UpSampling2D(4),
-        Conv2DTranspose(128, (3, 3), activation='relu', padding='same'),
+        Conv2DTranspose(128, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
 
         Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')
     ]
 )
 
+
+resize_and_rescale = tf.keras.Sequential([
+    tf.keras.layers.Resizing(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE),
+    tf.keras.layers.Rescaling(1. / 255)
+])
+
+data_augmentation = tf.keras.Sequential([
+    tf.keras.layers.RandomFlip("horizontal_and_vertical"),
+    tf.keras.layers.RandomZoom(0.2),
+])
+"""
+model = tf.keras.models.Sequential(
+    [
+        Input(shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)),
+        #resize_and_rescale,
+        #data_augmentation,
+
+        Conv2D(dataset_loader.IMAGE_SIZE, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2, 2),
+
+        Conv2D(dataset_loader.IMAGE_SIZE, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(4, 4),
+
+        Conv2D(dataset_loader.IMAGE_SIZE, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2, 2),
+
+        Dropout(0.3),
+
+        UpSampling2D(2),
+        Conv2DTranspose(dataset_loader.IMAGE_SIZE, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        UpSampling2D(2),
+        Conv2DTranspose(dataset_loader.IMAGE_SIZE, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        UpSampling2D(4),
+        Conv2DTranspose(dataset_loader.IMAGE_SIZE // 2, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        Conv2DTranspose(dataset_loader.IMAGE_SIZE // 4, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        Conv2DTranspose(dataset_loader.IMAGE_SIZE // 8, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
+        Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')
+        # Conv2D(3, 1, activation='softmax')
+    ]
+)"""
 
 print("model created")
 
@@ -181,27 +245,31 @@ plot_model(model, show_shapes=True)
 
 # Compile the model with the masked loss
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-    loss=weighted_combined_loss,
-    metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
+    optimizer=tf.keras.optimizers.Adam(learning_rate=3e-4),
+    loss=weighted_sparse_categorical_crossentropy,
+    #metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES), TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
+metrics=[WeightedMeanIoU(TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
 )
 
-model.save("models/max128_0.keras")
+model.save("models/max128_7_0.keras")
+
 counter = 0
 loss_list = []
 val_loss_list = []
 SMIoU_list = []
 val_SMIoU_list = []
-while counter < 12:
+while counter < TOTAL_EPOCHS:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/max128_{counter}.keras', custom_objects={'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
+    model = tf.keras.models.load_model(f'models/max128_7_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
     history = model.fit(
-        coco_train_and_test,
+
+        coco_train,
         epochs=EPOCHS,
-        validation_data=coco_val
+        validation_data=coco_val,
     )
+
     counter += EPOCHS
-    model.save(f"models/max128_{counter}.keras")
+    model.save(f"models/max128_7_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
     val_loss_list.append(np.mean(history.history['val_loss']))
     val_SMIoU_list.append(np.mean(history.history['val_weighted_mean_iou']))
@@ -216,15 +284,42 @@ plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_we
 plt.legend()
 plt.show()
 """
-model = tf.keras.models.load_model('models/st32_30.keras', custom_objects={'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1]})
+model_dir = 'models/'
+
+
+# Evaluate all models
+def evaluate_all_models(model_dir):
+
+    for model_name in os.listdir(model_dir):
+        tf.keras.backend.clear_session()
+        model_path = os.path.join(model_dir, model_name)
+
+        try:
+            if model_name.endswith('.keras'):
+                model = tf.keras.models.load_model(model_path, custom_objects={'dice_loss': dice_loss, 'segmentationmeaniou': SegmentationMeanIoU(num_classes=9), 'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1])})
+            else:
+                print(f"Skipping unsupported file: {model_name}")
+                continue
+
+            print(f"Evaluating model: {model_name}")
+            loss, acc = model.evaluate(coco_val)
+            print(f"  → Loss: {loss:.4f}, Accuracy: {acc:.4f}\n")
+
+        except Exception as e:
+            print(f"Error loading {model_name}: {e}")
+
+# Run the evaluation
+evaluate_all_models(model_dir)
+exit()
+#model = tf.keras.models.load_model('models/st32_30.keras', custom_objects={'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1]})
 print("model loaded")
-"""
+
 model.evaluate(coco_val)
 print("model evaluated")
 
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-"""
+
+""""""
 # Training set distribution
 train_true_list = []
 for _, masks in tqdm.tqdm(coco_train_and_test.take(train_steps), desc="Training Labels"):
@@ -242,14 +337,15 @@ val_true = np.concatenate(val_true_list)
 print("Validation label distribution:", Counter(val_true))
 """
 
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 y_true_list = []
-for _, masks in tqdm.tqdm(coco_val, desc="a"):
+for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
     flat = tf.reshape(masks, [-1]).numpy()  # shape (batch*H*W,)
     y_true_list.append(flat)
 
 
 y_pred_list = []
-for batch_preds in tqdm.tqdm(model.predict(coco_val), desc="b"):
+for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc="b"):
     preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
     y_pred_list.append(preds_flat)
 
