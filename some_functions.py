@@ -4,6 +4,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import tqdm
+from numpy.core.memmap import dtypedescr
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
@@ -29,9 +30,10 @@ from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_data
 
 import dataset_loader
 
-coco_weights = [1.0, 1.0, 0.7, 0.7, 0.7, 0.5, 0.5, 0.5, 0.1]
+coco_weights = [0.7, 0.7, 1, 1, 1, 0.5, 0.5, 0.5, 0.2]
 
 class WeightedMeanIoU(tf.keras.metrics.Metric):
+
     def __init__(self, num_classes=9, class_weights=coco_weights, name="weighted_mean_iou", **kwargs):
         super().__init__(name=name, **kwargs)
         self.num_classes = num_classes
@@ -43,6 +45,7 @@ class WeightedMeanIoU(tf.keras.metrics.Metric):
             name="confusion_matrix"
         )
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         # Convert logits to predicted class indices
         y_pred = tf.argmax(y_pred, axis=-1)
@@ -54,6 +57,7 @@ class WeightedMeanIoU(tf.keras.metrics.Metric):
         cm = tf.math.confusion_matrix(y_true, y_pred, num_classes=self.num_classes, dtype=tf.float32)
         self.confusion_matrix.assign_add(cm)
 
+    @tf.function
     def result(self):
         sum_over_row = tf.reduce_sum(self.confusion_matrix, axis=0)
         sum_over_col = tf.reduce_sum(self.confusion_matrix, axis=1)
@@ -68,7 +72,7 @@ class WeightedMeanIoU(tf.keras.metrics.Metric):
         self.confusion_matrix.assign(tf.zeros_like(self.confusion_matrix))
 
 
-
+@tf.function
 def dice_loss(y_true, y_pred, smooth=1e-6):
     # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
     # y_pred: (batch, h, w, c)  — float32 softmax probabilities
@@ -86,16 +90,16 @@ def dice_loss(y_true, y_pred, smooth=1e-6):
     dice = (2. * intersection + smooth) / (union + smooth)
     return 1 - tf.reduce_mean(dice)  # mean over all classes
 
-
+@tf.function
 def combined_loss(y_true, y_pred):
     ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
     d = dice_loss(y_true, y_pred)
     return ce + d
 
 
-import tensorflow as tf
 
 
+@tf.function
 def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6):
     """
     Weighted Dice loss for multi-class segmentation.
@@ -110,21 +114,22 @@ def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6
     y_true_onehot = tf.one_hot(tf.cast(y_true, tf.int32), num_classes)  # (b,h,w,c)
 
     # Flatten
-    y_true_f = tf.reshape(y_true_onehot, [-1, num_classes])
+    y_true_f = tf.cast(tf.reshape(y_true_onehot, [-1, num_classes]), tf.float16)
     y_pred_f = tf.reshape(y_pred, [-1, num_classes])
 
     intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=0)
     union = tf.reduce_sum(y_true_f + y_pred_f, axis=0)
 
-    dice = (2. * intersection + smooth) / (union + smooth)
+
+    dice = tf.cast((2. * intersection + smooth) / (union + smooth), tf.float16)
 
     # Apply class weights
-    class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+    class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float16)
     weighted_dice = dice * class_weights
 
     return 1 - tf.reduce_sum(weighted_dice) / tf.reduce_sum(class_weights)
 
-
+@tf.function
 def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
     """
     Combined weighted cross-entropy and weighted dice loss.
@@ -135,12 +140,21 @@ def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
     """
     # Weighted categorical cross-entropy
     ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
-    ce_weighted = tf.reduce_mean(tf.gather(class_weights, tf.cast(y_true, tf.int32)) * ce)
+    ce_weighted = tf.reduce_mean(tf.cast(tf.gather(class_weights, tf.cast(y_true, tf.int32)), tf.float16) * ce)
 
     # Weighted dice
     d = weighted_dice_loss(y_true, y_pred, class_weights)
 
     return ce_weighted + d
+
+
+tf_weights = tf.constant(coco_weights, dtype=tf.float32)  # Example weights for 9 classes
+@tf.function
+def weighted_sparse_categorical_crossentropy(y_true, y_pred):
+    loss_fn = SparseCategoricalCrossentropy(from_logits=False)
+    pixel_weights = tf.gather(tf_weights, y_true)
+    unweighted_loss = loss_fn(y_true, y_pred)
+    return tf.reduce_mean(unweighted_loss * pixel_weights)
 
 
 class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
@@ -151,6 +165,7 @@ class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
         self.num_classes = num_classes
         self.image_size = image_size
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         y_true = tf.cast(y_true, tf.int32)
         y_true = tf.ensure_shape(y_true, [None, self.image_size, self.image_size])
@@ -158,6 +173,7 @@ class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
         y_pred_labels = tf.ensure_shape(y_pred_labels, [None, self.image_size, self.image_size])
         return super().update_state(y_true, y_pred_labels, sample_weight)
 
+    @tf.function
     def get_config(self):
         config = super().get_config()
         config.update({
