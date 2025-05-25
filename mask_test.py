@@ -12,15 +12,15 @@ from PythonTableConsole import PythonTableConsole as PTC
 
 from some_functions import *
 # --- Configuration ---
-MODEL_PATH = 'models/st32_12.keras'
-IMAGE_PATH = 'datasets/untitl34ed.png'
+MODEL_PATH = 'models/max128_12.keras'
+IMAGE_PATH = 'datasets/lemon.jpg'
 IMAGE_SIZE = dataset_loader.IMAGE_SIZE
 
 # --- Load model (grayscale input) ---
 model = load_model(
     MODEL_PATH,
     custom_objects={
-        'combined_loss': combined_loss,
+        'weighted_combined_loss': weighted_combined_loss,
         'WeightedMeanIoU': WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)
     }
 )
