@@ -4,6 +4,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import tqdm
+from keras.layers import Conv2DTranspose
 
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
@@ -27,7 +28,7 @@ import keras
 from pycocotools.coco import COCO
 from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_dataset
 
-from some_functions import combined_loss, WeightedMeanIoU
+from some_functions import weighted_combined_loss, WeightedMeanIoU
 
 import numpy as np
 
@@ -36,8 +37,8 @@ import datasets_from_loader_utils as dflu
 
 BAD_MODEL_COEFFICIENT = 2 # reduces model size
 BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
-dataset_loader.BATCH_SIZE = 512
-dataset_loader.IMAGE_SIZE = 32
+dataset_loader.BATCH_SIZE = 128
+dataset_loader.IMAGE_SIZE = 128
 EPOCHS = 3
 #tf.debugging.set_log_device_placement(True)
 
@@ -63,17 +64,18 @@ val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
 )"""
 print("creating datasets")
 # Create datasets
+train_steps, val_steps = dataset_loader.coco_cardinality()
 coco_train_and_test = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
-    tfrecord_path="train_32.tfrecord"
-)
+    tfrecord_path="image_mask_train.tfrecord"
+).take(train_steps//BAD_DATASET_COEFFICIENT)
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
-    tfrecord_path="val_32.tfrecord"
-)
+    tfrecord_path="image_mask_val.tfrecord"
+).take(val_steps//BAD_DATASET_COEFFICIENT)
 print("MS COCO loaded.")
 """
 coco_test, coco_train = dflu.split_test_and_train(coco_train_and_test)
@@ -87,7 +89,7 @@ dflu.first_batch_labels(coco_test, dflu.coco_labels)"""
 
 # dflu.first_batch_masks(coco_train_and_test)
 
-train_steps, val_steps = dataset_loader.coco_cardinality()
+
 
 for _, masks in coco_train_and_test.take(1):
     print("min/max mask IDs:", tf.reduce_min(masks), tf.reduce_max(masks))
@@ -97,7 +99,7 @@ for _, masks in coco_val.take(1):
 
 
 
-""""""
+"""
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
     model = Sequential()
     model.add(Input(shape=input_shape))
@@ -130,24 +132,61 @@ def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_lo
     #model.add(UpSampling2D((1)))
     model.add(Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax'))
     return model
+"""
+
+tf.keras.backend.clear_session()
+#model = create_segmentation_model()
+model = tf.keras.models.Sequential(
+    [
+        Input(shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)),
+        # layers.Lambda(lambda x: tf.expand_dims(x, axis=-1)),
+
+        Conv2D(128, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(4, 4),
+
+        # layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
+        Conv2D(256, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(4, 4),
+
+        # layers.Conv2D(512, (3, 3), activation='relu', padding='same'),
+        # layers.BatchNormalization(),
+        # layers.MaxPooling2D(4, 4),
+
+        Dropout(0.3),
+
+        # layers.UpSampling2D(4),
+        # layers.Conv2DTranspose(512, (3, 3), activation='relu', padding='same'),
+        # layers.BatchNormalization(),
+
+        UpSampling2D(4),
+        # layers.Conv2DTranspose(256, (3, 3), activation='relu', padding='same'),
+        Conv2DTranspose(128, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        UpSampling2D(4),
+        Conv2DTranspose(128, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')
+    ]
+)
 
 
-
-model = create_segmentation_model()
 print("model created")
 
 model.summary()
 plot_model(model, show_shapes=True)
 
 # Compile the model with the masked loss
-model = create_segmentation_model()
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-    loss=combined_loss,
+    loss=weighted_combined_loss,
     metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-model.save("models/st32_0.keras")
+model.save("models/max128_0.keras")
 counter = 0
 loss_list = []
 val_loss_list = []
@@ -155,16 +194,14 @@ SMIoU_list = []
 val_SMIoU_list = []
 while counter < 12:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/st32_{counter}.keras', custom_objects={'combined_loss': combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
+    model = tf.keras.models.load_model(f'models/max128_{counter}.keras', custom_objects={'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
     history = model.fit(
-        coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
+        coco_train_and_test,
         epochs=EPOCHS,
-        steps_per_epoch=train_steps//BAD_DATASET_COEFFICIENT,
-        validation_data=coco_val.take(train_steps//BAD_DATASET_COEFFICIENT),
-        validation_steps=val_steps//BAD_DATASET_COEFFICIENT
+        validation_data=coco_val
     )
     counter += EPOCHS
-    model.save(f"models/st32_{counter}.keras")
+    model.save(f"models/max128_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
     val_loss_list.append(np.mean(history.history['val_loss']))
     val_SMIoU_list.append(np.mean(history.history['val_weighted_mean_iou']))
@@ -179,10 +216,10 @@ plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_we
 plt.legend()
 plt.show()
 """
-model = tf.keras.models.load_model('models/st32_30.keras', custom_objects={'combined_loss': combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1]})
+model = tf.keras.models.load_model('models/st32_30.keras', custom_objects={'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1]})
 print("model loaded")
 """
-model.evaluate(coco_val.take(val_steps), steps=val_steps)
+model.evaluate(coco_val)
 print("model evaluated")
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
@@ -206,13 +243,13 @@ print("Validation label distribution:", Counter(val_true))
 """
 
 y_true_list = []
-for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
+for _, masks in tqdm.tqdm(coco_val, desc="a"):
     flat = tf.reshape(masks, [-1]).numpy()  # shape (batch*H*W,)
     y_true_list.append(flat)
 
 
 y_pred_list = []
-for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc="b"):
+for batch_preds in tqdm.tqdm(model.predict(coco_val), desc="b"):
     preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
     y_pred_list.append(preds_flat)
 
