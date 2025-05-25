@@ -221,11 +221,20 @@ coco_rgb_colors = np.array([
 # ])
 
 
-def apply_mask_to_image(image, mask):
-    d3_gray_image = np.concatenate([image[..., None] for _ in range(3)], axis=-1)
+def apply_mask_to_image(image, mask):  # shape = (H, W, 1), mask = (H, W) OR shape = (?, H, W, 1), mask = (?, H, W)
+    axis = -1
+    if len(image.shape) == 3:
+        axis = 3
+        image_ = image[..., None]
+    elif len(image.shape) == 4:
+        axis = 3
+        image_ = image
+    # print(image.shape, mask.shape, axis)
+    d3_gray_image = np.concatenate([image_ for _ in range(3)], axis=axis)
+    # d3_gray_image = np.concatenate([image[..., None] for _ in range(3)], axis=-1)
     d3_mask = coco_rgb_colors[mask]
     image_with_mask = d3_gray_image * (d3_mask / 255)
-    return image_with_mask.astype(np.uint8)
+    return image_with_mask
 
 
 def coco_labels_index_merge(labels):
