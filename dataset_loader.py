@@ -295,7 +295,6 @@ def coco_cardinality():
     return train_steps, val_steps
 
 
-@property
 def coco_steps() -> list[int, int]:
     """Returns the number of steps for train and val
 
