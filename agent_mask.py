@@ -27,74 +27,21 @@ import keras
 from pycocotools.coco import COCO
 from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_dataset
 
+from some_functions import combined_loss, WeightedMeanIoU
+
 import numpy as np
 
 import dataset_loader
 import datasets_from_loader_utils as dflu
 
-BAD_MODEL_COEFFICIENT = 4 # reduces model size
+BAD_MODEL_COEFFICIENT = 2 # reduces model size
 BAD_DATASET_COEFFICIENT = 1 # reduces dataset size
-dataset_loader.BATCH_SIZE = 128
+dataset_loader.BATCH_SIZE = 512
 dataset_loader.IMAGE_SIZE = 32
-EPOCHS = 10
+EPOCHS = 3
 #tf.debugging.set_log_device_placement(True)
 
-def dice_loss(y_true, y_pred, smooth=1e-6):
-    # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
-    # y_pred: (batch, h, w, c)  — float32 softmax probabilities
 
-    num_classes = tf.shape(y_pred)[-1]
-    y_true_onehot = tf.one_hot(tf.cast(y_true, tf.int32), num_classes)  # (b,h,w,c)
-
-    # Flatten
-    y_true_f = tf.reshape(y_true_onehot, [-1, num_classes])
-    y_pred_f = tf.reshape(y_pred, [-1, num_classes])
-
-    intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=0)
-    union = tf.reduce_sum(y_true_f + y_pred_f, axis=0)
-
-    dice = (2. * intersection + smooth) / (union + smooth)
-    return 1 - tf.reduce_mean(dice)  # mean over all classes
-
-
-def combined_loss(y_true, y_pred):
-    ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
-    d = dice_loss(y_true, y_pred)
-    return ce + d
-
-
-
-
-class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
-    def __init__(self, name="SegmentationMeanIoU", *, num_classes, image_size=dataset_loader.IMAGE_SIZE, **kwargs):
-        # Filter out image_size from kwargs to avoid passing it to MeanIoU
-        kwargs.pop('image_size', None)
-        super().__init__(num_classes=num_classes, name=name, **kwargs)
-        self.num_classes = num_classes
-        self.image_size = image_size
-
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true = tf.cast(y_true, tf.int32)
-        y_true = tf.ensure_shape(y_true, [None, self.image_size, self.image_size])
-        y_pred_labels = tf.argmax(y_pred, axis=-1)
-        y_pred_labels = tf.ensure_shape(y_pred_labels, [None, self.image_size, self.image_size])
-        return super().update_state(y_true, y_pred_labels, sample_weight)
-
-    def get_config(self):
-        config = super().get_config()
-        config.update({
-            "num_classes": self.num_classes,
-            "image_size": self.image_size
-        })
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(
-            name=config.get("name", "SegmentationMeanIoU"),
-            num_classes=config["num_classes"],
-            image_size=config.get("image_size", 128)
-        )
 
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
@@ -150,37 +97,37 @@ for _, masks in coco_val.take(1):
 
 
 
-
+""""""
 def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)):
     model = Sequential()
     model.add(Input(shape=input_shape))
-    model.add(MaxPooling2D((2)))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (4 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
+    #model.add(MaxPooling2D((1)))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (4 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 1) * 2 + 1,
                      activation='relu', padding='same'))
     model.add(MaxPooling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
                      activation='relu', padding='same'))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
                      activation='relu', padding='same'))
     model.add(MaxPooling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // BAD_MODEL_COEFFICIENT, (dataset_loader.IMAGE_SIZE // 8) * 2 + 1,
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // BAD_MODEL_COEFFICIENT, (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
                      activation='relu', padding='same'))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // BAD_MODEL_COEFFICIENT, (dataset_loader.IMAGE_SIZE // 8) * 2 + 1,
-                     activation='relu', padding='same'))
-
-    model.add(UpSampling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // BAD_MODEL_COEFFICIENT, (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
                      activation='relu', padding='same'))
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 4) * 2 + 1,
-                     activation='relu', padding='same'))
-    model.add(UpSampling2D((2)))
     model.add(BatchNormalization())
-    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (4 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
-                     activation='relu', padding='same'))
     model.add(UpSampling2D((2)))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
+                     activation='relu', padding='same'))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (2 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 2) * 2 + 1,
+                     activation='relu', padding='same'))
+    model.add(BatchNormalization())
+    model.add(UpSampling2D((2)))
+    model.add(Conv2D(dataset_loader.IMAGE_SIZE // (4 * BAD_MODEL_COEFFICIENT), (dataset_loader.IMAGE_SIZE // 1) * 2 + 1,
+                     activation='relu', padding='same'))
+    #model.add(UpSampling2D((1)))
     model.add(Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax'))
     return model
 
@@ -196,19 +143,19 @@ plot_model(model, show_shapes=True)
 model = create_segmentation_model()
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-    loss=dice_loss,
-    metrics=[SegmentationMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
+    loss=combined_loss,
+    metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)]
 )
 
-model.save("models/st32_small_0.keras")
+model.save("models/st32_0.keras")
 counter = 0
 loss_list = []
 val_loss_list = []
 SMIoU_list = []
 val_SMIoU_list = []
-while counter < 30:
+while counter < 12:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/st32_small_{counter}.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+    model = tf.keras.models.load_model(f'models/st32_{counter}.keras', custom_objects={'combined_loss': combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
     history = model.fit(
         coco_train_and_test.take(train_steps//BAD_DATASET_COEFFICIENT),
         epochs=EPOCHS,
@@ -217,28 +164,22 @@ while counter < 30:
         validation_steps=val_steps//BAD_DATASET_COEFFICIENT
     )
     counter += EPOCHS
-    model.save(f"models/st32_small_{counter}.keras")
+    model.save(f"models/st32_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
     val_loss_list.append(np.mean(history.history['val_loss']))
-    val_SMIoU_list.append(np.mean(history.history['val_SegmentationMeanIoU']))
-    SMIoU_list.append(np.mean(history.history['SegmentationMeanIoU']))
+    val_SMIoU_list.append(np.mean(history.history['val_weighted_mean_iou']))
+    SMIoU_list.append(np.mean(history.history['weighted_mean_iou']))
 plt.plot(np.linspace(0, counter, counter//EPOCHS),loss_list, label="loss")
 plt.plot(np.linspace(0, counter, counter//EPOCHS), val_loss_list, label="val_loss")
 plt.legend()
 plt.show()
 
-plt.plot(np.linspace(0, counter, counter//EPOCHS), SMIoU_list, label="SegmentationMeanIoU")
-plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_SegmentationMeanIoU")
+plt.plot(np.linspace(0, counter, counter//EPOCHS), SMIoU_list, label="weighted_mean_iou")
+plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_weighted_mean_iou")
 plt.legend()
 plt.show()
 """
-
-plt.plot(history.history['accuracy'], label = "accuracy")
-plt.plot(history.history['val_accuracy'], label = "val_accuracy")
-plt.legend()
-plt.show()
-""""""
-model = tf.keras.models.load_model('models/st32_20.keras', custom_objects={'dice_loss': dice_loss, 'combined_loss': combined_loss, "SegmentationMeanIoU": SegmentationMeanIoU})
+model = tf.keras.models.load_model('models/st32_30.keras', custom_objects={'combined_loss': combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1]})
 print("model loaded")
 """
 model.evaluate(coco_val.take(val_steps), steps=val_steps)
