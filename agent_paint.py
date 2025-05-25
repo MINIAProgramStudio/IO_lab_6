@@ -69,8 +69,22 @@ input_gray = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE, 1))  # (?, 128, 1
 
 # Internal call to Agent 1
 agent1_mask = msh_model(input_gray)  # (?, 128, 128, 9)
-# agent1_mask = tf.argmax(agent1_mask, axis=3)  # (?, 128, 128, 1)
-# agent1_mask = dflu.apply_mask_to_image(input_gray, agent1_mask)  # (?, 128, 128, 3)
+agent1_mask = tf.argmax(agent1_mask, axis=3)[..., tf.newaxis]  # (?, 128, 128, 1)
+d3_gray_image = tf.concat([input_gray for _ in range(3)], axis=3)
+coco_rgb_colors = tf.constant([
+    [255, 255, 255],  # light
+    [0, 0, 0],        # dark
+    [255, 0, 0],      # red
+    [0, 255, 0],      # green
+    [0, 0, 255],      # blue
+    [0, 255, 255],    # cyan
+    [255, 255, 0],    # yellow
+    [255, 0, 255],    # magenta
+    [128, 128, 128],  # gray
+])
+agent1_mask = tf.squeeze(agent1_mask, axis=3)
+agent1_mask = tf.gather(coco_rgb_colors, agent1_mask)
+agent1_mask = d3_gray_image * (tf.cast(agent1_mask, tf.float32) / 255)
 
 # Concatenate input and Agent 1 output
 x = layers.Concatenate(axis=-1)([input_gray, agent1_mask])  # (?, 128, 128, 4)
