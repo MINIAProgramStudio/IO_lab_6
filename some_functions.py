@@ -29,7 +29,7 @@ from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_data
 
 import dataset_loader
 
-coco_weights = [1.0, 1.0, 0.7, 0.7, 0.7, 0.5, 0.5, 0.5, 10]
+coco_weights = [1.0, 1.0, 0.7, 0.7, 0.7, 0.5, 0.5, 0.5, 0.1]
 
 class WeightedMeanIoU(tf.keras.metrics.Metric):
     def __init__(self, num_classes=9, class_weights=coco_weights, name="weighted_mean_iou", **kwargs):
@@ -93,6 +93,54 @@ def combined_loss(y_true, y_pred):
     return ce + d
 
 
+import tensorflow as tf
+
+
+def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6):
+    """
+    Weighted Dice loss for multi-class segmentation.
+    Args:
+        y_true: Tensor of shape (batch, h, w), integer labels.
+        y_pred: Tensor of shape (batch, h, w, c), softmax probabilities.
+        class_weights: Tensor or list of shape (num_classes,) with class weights.
+    Returns:
+        Weighted dice loss.
+    """
+    num_classes = tf.shape(y_pred)[-1]
+    y_true_onehot = tf.one_hot(tf.cast(y_true, tf.int32), num_classes)  # (b,h,w,c)
+
+    # Flatten
+    y_true_f = tf.reshape(y_true_onehot, [-1, num_classes])
+    y_pred_f = tf.reshape(y_pred, [-1, num_classes])
+
+    intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=0)
+    union = tf.reduce_sum(y_true_f + y_pred_f, axis=0)
+
+    dice = (2. * intersection + smooth) / (union + smooth)
+
+    # Apply class weights
+    class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+    weighted_dice = dice * class_weights
+
+    return 1 - tf.reduce_sum(weighted_dice) / tf.reduce_sum(class_weights)
+
+
+def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
+    """
+    Combined weighted cross-entropy and weighted dice loss.
+    Args:
+        y_true: Ground truth labels (batch, h, w).
+        y_pred: Predicted probabilities (batch, h, w, c).
+        class_weights: List or tensor of class weights.
+    """
+    # Weighted categorical cross-entropy
+    ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
+    ce_weighted = tf.reduce_mean(tf.gather(class_weights, tf.cast(y_true, tf.int32)) * ce)
+
+    # Weighted dice
+    d = weighted_dice_loss(y_true, y_pred, class_weights)
+
+    return ce_weighted + d
 
 
 class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
