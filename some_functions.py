@@ -114,17 +114,17 @@ def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6
     y_true_onehot = tf.one_hot(tf.cast(y_true, tf.int32), num_classes)  # (b,h,w,c)
 
     # Flatten
-    y_true_f = tf.cast(tf.reshape(y_true_onehot, [-1, num_classes]), tf.float16)
+    y_true_f = tf.reshape(y_true_onehot, [-1, num_classes])
     y_pred_f = tf.reshape(y_pred, [-1, num_classes])
 
     intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=0)
     union = tf.reduce_sum(y_true_f + y_pred_f, axis=0)
 
 
-    dice = tf.cast((2. * intersection + smooth) / (union + smooth), tf.float16)
+    dice = (2. * intersection + smooth) / (union + smooth)
 
     # Apply class weights
-    class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float16)
+    class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
     weighted_dice = dice * class_weights
 
     return 1 - tf.reduce_sum(weighted_dice) / tf.reduce_sum(class_weights)
@@ -140,7 +140,7 @@ def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
     """
     # Weighted categorical cross-entropy
     ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
-    ce_weighted = tf.reduce_mean(tf.cast(tf.gather(class_weights, tf.cast(y_true, tf.int32)), tf.float16) * ce)
+    ce_weighted = tf.reduce_mean(tf.gather(class_weights, tf.cast(y_true, tf.int32)) * ce)
 
     # Weighted dice
     d = weighted_dice_loss(y_true, y_pred, class_weights)
