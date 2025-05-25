@@ -13,6 +13,7 @@ layers = tf.keras.layers
 ## PARAMETERS
 dl.IMAGE_SIZE = 128
 dl.BATCH_SIZE = 32
+EPOCHS = 2
 
 MODEL_PATH = "models/max128_5_12.keras"
 
@@ -21,6 +22,8 @@ TFRECORD_PATH_TRAIN = "tfrecords/image_mask_train.tfrecord"  # 128x128 train pre
 TFRECORD_PATH_VAL = "tfrecords/image_mask_val.tfrecord"  # 128x128 test precomputed images and masks
 # TFRECORD_PATH_VAL = "tfrecords/val_32.tfrecord"  # 32x32 test precomputed images and masks
 
+TRAIN_STEPS, VAL_STEPS = dl.coco_cardinality()
+DATASET_RATIO = 1  # 1/?
 
 ## LOAD MODEL FROM AGENT 1
 msh_model = tf.keras.models.load_model(
@@ -36,13 +39,13 @@ coco_train = dl.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
     tfrecord_path=TFRECORD_PATH_TRAIN
-)
+).take(TRAIN_STEPS//DATASET_RATIO)
 
 coco_val = dl.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
     tfrecord_path=TFRECORD_PATH_VAL
-)
+).take(VAL_STEPS//DATASET_RATIO)
 
 ## CREATE MODEL FOR AGENT 2
 # TODO: CHECK IF THIS IS NECESSARY
@@ -61,6 +64,7 @@ data_augmentation = tf.keras.Sequential([
 model = tf.keras.models.Sequential(
     [
         layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE, 1)),  # RECEIVE (?, 128, 128, 1), values from 0 to 1 or 0 to 255
+        # layers.Lambda(lambda x: tf.expand_dims(x, axis=-1)),
 
         layers.Conv2D(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same'),
         layers.BatchNormalization(),
@@ -103,8 +107,8 @@ model.summary()
 # TODO: VALIDATE MODEL
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-    loss=,
-    metrics=[]
+    loss=tf.keras.losses.MeanSquaredError(),
+    metrics=['mae']
 )
 
 ## TRAIN MODEL
@@ -119,4 +123,11 @@ callbacks = [
         monitor='val_loss', save_best_only=True
     )
 ]
-model.fit
+history = model.fit(
+    coco_train,
+    epochs=EPOCHS,
+    # train_steps=train_steps,
+    validation_data=coco_val,
+    # validation_steps=val_steps,
+    callbacks=callbacks
+)
