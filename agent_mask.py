@@ -2,11 +2,6 @@ from logging import WARNING
 import os
 
 from keras.metrics import SparseCategoricalAccuracy
-
-os.environ["TF_CUDA_HOME"] = "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.2"
-os.environ["XLA_FLAGS"] = '--xla_gpu_cuda_data_dir="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.2"'
-import shutil
-print(shutil.which("ptxas"))
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
@@ -43,16 +38,12 @@ import dataset_loader
 import datasets_from_loader_utils as dflu
 
 BAD_MODEL_COEFFICIENT = 1 # reduces model size
-STEPS_PER_EPOCH = 10
-BATCH_SIZE = 2**10
+STEPS_PER_EPOCH = 45
+dataset_loader.BATCH_SIZE = 2**6
 dataset_loader.IMAGE_SIZE = 128
 EPOCHS = 20
-TOTAL_EPOCHS = 200
+TOTAL_EPOCHS = 3000
 #tf.debugging.set_log_device_placement(True)
-
-from tensorflow.keras.mixed_precision import set_global_policy
-set_global_policy('mixed_float16')
-tf.config.optimizer.set_jit(True)
 
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
@@ -78,13 +69,13 @@ train_steps, val_steps = dataset_loader.coco_cardinality()
 coco_train = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
-    tfrecord_path="image_mask_train.tfrecord"
+    tfrecord_path="tfrecords/image_mask_train.tfrecord"
 )
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
-    tfrecord_path="image_mask_val.tfrecord"
+    tfrecord_path="tfrecords/image_mask_val.tfrecord"
 )
 print("MS COCO loaded.")
 """
@@ -146,19 +137,19 @@ def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_lo
 
 tf.keras.backend.clear_session()
 #model = create_segmentation_model()
-KERNEL_SIZE = 7
+KERNEL_SIZE = 3
 
 model = tf.keras.models.Sequential(
     [
         Input(shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)),
         # layers.Lambda(lambda x: tf.expand_dims(x, axis=-1)),
 
-        Conv2D(128, (KERNEL_SIZE*3, KERNEL_SIZE*3), activation='relu', padding='same'),
+        Conv2D(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
         MaxPooling2D(4, 4),
 
         # layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
-        Conv2D(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2D(512, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
         MaxPooling2D(4, 4),
 
@@ -171,14 +162,15 @@ model = tf.keras.models.Sequential(
         # layers.UpSampling2D(4),
         # layers.Conv2DTranspose(512, (3, 3), activation='relu', padding='same'),
         # layers.BatchNormalization(),
-
+        Conv2D(1024, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        BatchNormalization(),
         UpSampling2D(4),
         # layers.Conv2DTranspose(256, (3, 3), activation='relu', padding='same'),
-        Conv2DTranspose(128, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2DTranspose(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
 
         UpSampling2D(4),
-        Conv2DTranspose(128, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2DTranspose(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
         BatchNormalization(),
 
         Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')
@@ -248,10 +240,10 @@ model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=3e-4),
     loss=weighted_sparse_categorical_crossentropy,
     #metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES), TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
-    metrics=[WeightedMeanIoU(TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
+    metrics=[WeightedMeanIoU(), SparseCategoricalAccuracy()]
 )
 
-model.save("models/max128_7_0.keras")
+model.save("models/optimus_0.keras")
 
 counter = 0
 loss_list = []
@@ -260,27 +252,29 @@ SMIoU_list = []
 val_SMIoU_list = []
 while counter < TOTAL_EPOCHS:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/max128_7_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
+    model = tf.keras.models.load_model(f'models/optimus_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
     history = model.fit(
 
         coco_train,
+        steps_per_epoch = STEPS_PER_EPOCH,
         epochs=EPOCHS,
         validation_data=coco_val,
+        validation_steps = val_steps//4
     )
 
     counter += EPOCHS
-    model.save(f"models/max128_7_{counter}.keras")
+    model.save(f"models/optimus_{counter}.keras")
     loss_list.append(np.mean(history.history['loss']))
-    val_loss_list.append(np.mean(history.history['val_loss']))
-    val_SMIoU_list.append(np.mean(history.history['val_weighted_mean_iou']))
+    val_loss_list.append(history.history['val_loss'])
+    val_SMIoU_list.append(history.history['val_weighted_mean_iou'])
     SMIoU_list.append(np.mean(history.history['weighted_mean_iou']))
-plt.plot(np.linspace(0, counter, counter//EPOCHS),loss_list, label="loss")
-plt.plot(np.linspace(0, counter, counter//EPOCHS), val_loss_list, label="val_loss")
+plt.plot(loss_list, label="loss")
+plt.plot(val_loss_list, label="val_loss")
 plt.legend()
 plt.show()
 
-plt.plot(np.linspace(0, counter, counter//EPOCHS), SMIoU_list, label="weighted_mean_iou")
-plt.plot(np.linspace(0, counter, counter//EPOCHS), val_SMIoU_list, label="val_weighted_mean_iou")
+plt.plot(SMIoU_list, label="weighted_mean_iou")
+plt.plot(val_SMIoU_list, label="val_weighted_mean_iou")
 plt.legend()
 plt.show()
 """
