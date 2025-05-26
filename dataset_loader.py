@@ -81,12 +81,12 @@ def write_tfrecord_for_images(image_dir, output_tfrecord_path):
         for img_file in img_files:
             img_path = os.path.join(image_dir, img_file)
             img_rgb = read_reshape_normalise(img_path)
-            img_gray = tf.image.rgb_to_grayscale(img_rgb)
             image_mask = rgb_to_label_map(img_rgb)
+            img_gray = tf.image.rgb_to_grayscale(img_rgb)
             img_rgb = tf.image.rgb_to_hsv(img_rgb)
 
             img_gray = tf.ensure_shape(img_gray, [IMAGE_SIZE, IMAGE_SIZE, 1])
-            image_mask = tf.ensure_shape(img_gray, [IMAGE_SIZE, IMAGE_SIZE])
+            image_mask = tf.ensure_shape(image_mask, [IMAGE_SIZE, IMAGE_SIZE])
             img_rgb = tf.ensure_shape(img_rgb, [IMAGE_SIZE, IMAGE_SIZE, 3])
 
             feature = {
@@ -125,7 +125,7 @@ def parse_tfrecord_images(serialized_example):
     }
     example = tf.io.parse_single_example(serialized_example, feature_description)
     image_gray = tf.io.parse_tensor(example['image_gray'], out_type=tf.float32)
-    image_mask = tf.io.parse_tensor(example['image_mask'], out_type=tf.float32)
+    image_mask = tf.io.parse_tensor(example['image_mask'], out_type=tf.int32)
     image_rgb = tf.io.parse_tensor(example['image_rgb'], out_type=tf.float32)
 
     image_gray.set_shape([IMAGE_SIZE, IMAGE_SIZE, 1])
