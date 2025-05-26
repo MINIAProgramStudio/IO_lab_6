@@ -31,8 +31,10 @@ def calculate_label_distribution(tfrecord_path, channels=1):
 
     return label_counts, label_distribution
 
-tfrecord_path = 'tfrecords/image_mask_train.tfrecord'  # your precomputed TFRecord path
+tfrecord_path = 'tfrecords/128hsv1_train.tfrecord'  # your precomputed TFRecord path
 counts, distribution = calculate_label_distribution(tfrecord_path)
 
-print("Pixel counts per label:", counts)
+print("Pixel counts per label:")
+for c in range(len(counts)):
+    print(c, counts[c])
 print("Normalized label distribution:", distribution)

@@ -12,8 +12,8 @@ from PythonTableConsole import PythonTableConsole as PTC
 from some_functions import *
 
 # --- Configuration ---
-MODEL_PATH = 'models/unet32green_50.keras'
-IMAGE_PATH = 'datasets/melon.jpg'
+MODEL_PATH = 'models/unet32hsv_500.keras'
+IMAGE_PATH = 'datasets/lemon.jpg'
 IMAGE_SIZE = dataset_loader.IMAGE_SIZE
 
 # --- Load model ---
@@ -46,7 +46,7 @@ img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 img_resized = cv2.resize(img_rgb, (IMAGE_SIZE, IMAGE_SIZE))
 
 # --- Ground truth label matrix ---
-gt_labels = dataset_loader.rgb_to_label_map(img_resized)
+gt_labels = dataset_loader.rgb_to_hsv_to_label_map(img_resized)
 
 # --- Convert label map to RGB mask using coco_rgb_colors ---
 def label_to_rgb(mask, color_map):

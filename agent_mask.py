@@ -44,7 +44,7 @@ dataset_loader.BATCH_SIZE = 96
 dataset_loader.IMAGE_SIZE = 128
 EPOCHS = 25
 START_EPOCH = 0
-TOTAL_EPOCHS = 50
+TOTAL_EPOCHS = 500
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -64,20 +64,21 @@ val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     val_img_dir=dataset_loader.coco_val_img_dir,
     channels=1,
     output_tfrecord_path="FAILSAFE.tfrecord"
-)"""
+)
+exit()"""
 print("creating datasets")
 # Create datasets
 train_steps, val_steps = dataset_loader.coco_cardinality()
 coco_train = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
-    tfrecord_path="tfrecords/image_mask_train.tfrecord"
+    tfrecord_path="tfrecords/128hsv1_train.tfrecord"
 )
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
-    tfrecord_path="tfrecords/image_mask_val.tfrecord"
+    tfrecord_path="tfrecords/128hsv1_val.tfrecord"
 )
 print("MS COCO loaded.")
 """
@@ -281,7 +282,7 @@ model.compile(
     metrics=[WeightedMeanIoU(), SparseCategoricalAccuracy()]
 )
 
-model.save("models/unet32green_0.keras")
+model.save("models/unet32hsv_0.keras")
 
 counter = START_EPOCH
 loss_list = list()
@@ -290,7 +291,7 @@ SMIoU_list = list()
 val_SMIoU_list = list()
 while counter < TOTAL_EPOCHS:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/unet32green_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
+    model = tf.keras.models.load_model(f'models/unet32hsv_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
     history = model.fit(
 
         coco_train,
@@ -301,7 +302,7 @@ while counter < TOTAL_EPOCHS:
     )
 
     counter += EPOCHS
-    model.save(f"models/unet32green_{counter}.keras")
+    model.save(f"models/unet32hsv_{counter}.keras")
     loss_list += history.history['loss']
     val_loss_list+=history.history['val_loss']
     val_SMIoU_list+=history.history['val_weighted_mean_iou']
