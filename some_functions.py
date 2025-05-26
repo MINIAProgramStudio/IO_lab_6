@@ -189,3 +189,18 @@ class SegmentationMeanIoU(tf.keras.metrics.MeanIoU):
             num_classes=config["num_classes"],
             image_size=config.get("image_size", 128)
         )
+
+
+def ImageQuality(y_true, y_pred):
+    return tf.image.psnr(y_true, y_pred, max_val=1.0)
+
+
+def PerceptualSimilarity(y_true, y_pred):
+    return tf.image.ssim(y_true, y_pred, max_val=1.0)
+
+
+def combined_loss_agent2(y_true, y_pred):
+    mse = tf.reduce_mean(tf.square(y_true - y_pred))
+    ssim = 1 - tf.reduce_mean(PerceptualSimilarity(y_true, y_pred))
+    psnr = tf.reduce_mean(1/(ImageQuality(y_true, y_pred) + 1e-10))
+    return 0.5 * mse + 0.2 * ssim + 0.3 * psnr

@@ -208,29 +208,16 @@ coco_rgb_colors = np.array([
     [128, 128, 128],  # gray
 ])
 
-# coco_hsv_colors = np.array([
-#     [0, 0, 255],      # White
-#     [0, 0, 0],        # Black
-#     [0, 255, 255],    # Red
-#     [60, 255, 255],   # Green
-#     [120, 255, 255],  # Blue
-#     [90, 255, 255],   # Cyan
-#     [30, 255, 255],   # Yellow
-#     [150, 255, 255],  # Magenta
-#     [0, 0, 128]       # Gray
-# ])
+coco_rgb_colors_tf = tf.constant(coco_rgb_colors)
 
 
 def apply_mask_to_image(image, mask):  # shape = (H, W, 1), mask = (H, W) OR shape = (?, H, W, 1), mask = (?, H, W)
-    axis = -1
-    if len(image.shape) == 3:
-        axis = 3
-        image_ = image[..., None]
-    elif len(image.shape) == 4:
-        axis = 3
-        image_ = image
+    axis = 3
+    if image.shape[-1] != 1:
+        image = image[..., None]
+        axis = 2
     # print(image.shape, mask.shape, axis)
-    d3_gray_image = np.concatenate([image_ for _ in range(3)], axis=axis)
+    d3_gray_image = np.concatenate([image for _ in range(3)], axis=axis)
     # d3_gray_image = np.concatenate([image[..., None] for _ in range(3)], axis=-1)
     d3_mask = coco_rgb_colors[mask]
     image_with_mask = d3_gray_image * (d3_mask / 255)

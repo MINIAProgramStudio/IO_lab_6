@@ -82,13 +82,17 @@ def write_tfrecord_for_images(image_dir, output_tfrecord_path):
             img_path = os.path.join(image_dir, img_file)
             img_rgb = read_reshape_normalise(img_path)
             img_gray = tf.image.rgb_to_grayscale(img_rgb)
+            image_mask = rgb_to_label_map(img_rgb)
+            img_rgb = tf.image.rgb_to_hsv(img_rgb)
 
             img_gray = tf.ensure_shape(img_gray, [IMAGE_SIZE, IMAGE_SIZE, 1])
+            image_mask = tf.ensure_shape(img_gray, [IMAGE_SIZE, IMAGE_SIZE])
             img_rgb = tf.ensure_shape(img_rgb, [IMAGE_SIZE, IMAGE_SIZE, 3])
 
             feature = {
                 'img_path': _bytes_feature(img_path.encode('utf-8')),
                 'image_gray': _bytes_feature(tf.io.serialize_tensor(img_gray).numpy()),
+                'image_mask': _bytes_feature(tf.io.serialize_tensor(image_mask).numpy()),
                 'image_rgb': _bytes_feature(tf.io.serialize_tensor(img_rgb).numpy())
             }
             example = tf.train.Example(features=tf.train.Features(feature=feature))
@@ -116,16 +120,19 @@ def parse_tfrecord_images(serialized_example):
     feature_description = {
         'img_path': tf.io.FixedLenFeature([], tf.string),
         'image_gray': tf.io.FixedLenFeature([], tf.string),
+        'image_mask': tf.io.FixedLenFeature([], tf.string),
         'image_rgb': tf.io.FixedLenFeature([], tf.string)
     }
     example = tf.io.parse_single_example(serialized_example, feature_description)
     image_gray = tf.io.parse_tensor(example['image_gray'], out_type=tf.float32)
+    image_mask = tf.io.parse_tensor(example['image_mask'], out_type=tf.float32)
     image_rgb = tf.io.parse_tensor(example['image_rgb'], out_type=tf.float32)
 
     image_gray.set_shape([IMAGE_SIZE, IMAGE_SIZE, 1])
+    image_mask.set_shape([IMAGE_SIZE, IMAGE_SIZE])
     image_rgb.set_shape([IMAGE_SIZE, IMAGE_SIZE, 3])
 
-    return image_gray, image_rgb
+    return (image_gray, image_mask), image_rgb
 
 
 # def parse_tfrecord_rgb_mask(serialized_example):
@@ -276,6 +283,38 @@ def coco_RGB_dataset_precomputed_agent2(tfrecord_path: str) -> tf.data.TFRecordD
     )
     ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     return ds.repeat()
+
+
+def coco_RGB_datasets_agent2() -> tf.data.TFRecordDataset:
+    """Creates a dataset from images
+
+    Args:
+        img_dir (str): Path where images is located
+
+    Returns:
+        tf.data.TFRecordDataset: TFRecordDataset
+    """
+
+    train = tf.keras.preprocessing.image_dataset_from_directory(
+        coco_train_img_dir,
+        labels=None,
+        image_size=(IMAGE_SIZE, IMAGE_SIZE),
+        batch_size=BATCH_SIZE
+    ).prefetch(tf.data.AUTOTUNE).repeat()
+    val = tf.keras.preprocessing.image_dataset_from_directory(
+        coco_val_img_dir,
+        labels=None,
+        image_size=(IMAGE_SIZE, IMAGE_SIZE),
+        batch_size=BATCH_SIZE
+    ).prefetch(tf.data.AUTOTUNE).repeat()
+    # train_ds = tf.keras.preprocessing.image_dataset_from_directory(
+    #     img_dir,
+    #     image_size=(IMAGE_SIZE, IMAGE_SIZE),
+    #     batch_size=BATCH_SIZE
+    # )
+    # ds = ds.prefetch(tf.data.AUTOTUNE)
+    # return ds.repeat()
+    return train, val
 
 
 def coco_cardinality():
