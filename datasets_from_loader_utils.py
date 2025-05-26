@@ -216,6 +216,9 @@ def apply_mask_to_image(image, mask):  # shape = (H, W, 1), mask = (H, W) OR sha
     if image.shape[-1] != 1:
         image = image[..., None]
         axis = 2
+    else:
+        if len(image.shape) == 3:
+            axis = 2
     # print(image.shape, mask.shape, axis)
     d3_gray_image = np.concatenate([image for _ in range(3)], axis=axis)
     # d3_gray_image = np.concatenate([image[..., None] for _ in range(3)], axis=-1)
