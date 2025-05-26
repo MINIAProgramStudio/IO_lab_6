@@ -232,22 +232,24 @@ def precompute_images(
 
 def rgb_to_label_map(img):
     r, g, b = tf.cast(img[..., 0], dtype=tf.float32), tf.cast(img[..., 1], dtype=tf.float32), tf.cast(img[..., 2], dtype=tf.float32)
-    mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
-    max_rgb = np.max(mean_rgb.numpy())
-    if max_rgb < 1:
-        min_rgb = 15.0/255.0
+    #mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
+    max_rgb = np.max(r.numpy()+g.numpy()+b.numpy())
+    if max_rgb <= 4:
+        max_rgb = 2.8
+        min_rgb = 0.004*20
     else:
-        min_rgb = 15
+        max_rgb = 255*2.8
+        min_rgb = 40
     # Define all conditions in one go
     conditions = [
-        mean_rgb > max_rgb*0.95,  # light
-        mean_rgb < min_rgb,  # dark
-        (r * 0.7 - mean_rgb) > 0,  # red
-        (g * 0.7 - mean_rgb) > 0,  # green
-        (b * 0.75 - mean_rgb) > 0,  # blue
-        (r * 1.12 - mean_rgb) < 0,  # cyan
-        (b * 1.265 - mean_rgb) < 0,  # yellow
-        (g * 1.14 - mean_rgb) < 0  # magenta
+        r+b+g > max_rgb,  # light
+        r+b+g < min_rgb,  # dark
+        r*1.2 > b+g,  # red
+        g*1.7 > r+b,  # green
+        b*1.6 > r+g,  # blue
+        r*1.8 < b+g,  # cyan
+        b*1.75 < r+g,  # yellow
+        g*1.8 < r+b  # magenta
     ]
     labels = [0, 1, 2, 3, 4, 5, 6, 7]
 
