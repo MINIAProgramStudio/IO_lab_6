@@ -235,7 +235,7 @@ def rgb_to_label_map(img):
     mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
     max_rgb = np.max(mean_rgb.numpy())
     if max_rgb < 1:
-        min_rgb = 15/255.0
+        min_rgb = 15.0/255.0
     else:
         min_rgb = 15
     # Define all conditions in one go
