@@ -117,6 +117,7 @@ model = tf.keras.Model(inputs=input_gray, outputs=output)
 # """
 
 # """
+kernel_size = (5, 5)
 input_gray = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE, 1))  # (None, 128, 128, 1)
 input_mask = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE), dtype=tf.int32)  # (None, 128, 128)
 
@@ -128,15 +129,23 @@ image_with_mask = tf.image.rgb_to_hsv(image_with_mask)
 
 x = layers.Concatenate(axis=-1)([input_gray, image_with_mask])  # (None, 128, 128, 4)
 
-x = layers.Conv2D(64, (3, 3), padding='same')(x)
+x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('relu')(x)
 
-x = layers.Conv2D(128, (3, 3), padding='same')(x)
+x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('relu')(x)
 
-x = layers.Conv2D(64, (3, 3), padding='same')(x)
+x = layers.Conv2D(128, kernel_size, padding='same')(x)
+x = layers.BatchNormalization()(x)
+x = layers.Activation('relu')(x)
+
+x = layers.Conv2D(64, kernel_size, padding='same')(x)
+x = layers.BatchNormalization()(x)
+x = layers.Activation('relu')(x)
+
+x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('relu')(x)
 
@@ -217,7 +226,6 @@ model = tf.keras.models.Sequential(
         layers.Conv2D(3, 1, activation='softmax')  # RETURN (?, 128, 128, 3), values from 0 to 1 or 0 to 255
     ]
 )
-model.summary()
 """
 
 
@@ -235,6 +243,8 @@ model.compile(
     # loss=tf.keras.losses.MeanSquaredError(),
     # metrics=['mae', 'accuracy']
 )
+
+model.summary()
 # """
 
 ## TRAIN MODEL
