@@ -1,6 +1,7 @@
 from logging import WARNING
 import os
 
+from keras import Model
 from keras.metrics import SparseCategoricalAccuracy
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -39,10 +40,11 @@ import datasets_from_loader_utils as dflu
 
 BAD_MODEL_COEFFICIENT = 1 # reduces model size
 STEPS_PER_EPOCH = 45
-dataset_loader.BATCH_SIZE = 2**6
+dataset_loader.BATCH_SIZE = 96
 dataset_loader.IMAGE_SIZE = 128
-EPOCHS = 20
-TOTAL_EPOCHS = 3000
+EPOCHS = 25
+START_EPOCH = 0
+TOTAL_EPOCHS = 50
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -133,7 +135,7 @@ def create_segmentation_model(input_shape=(dataset_loader.IMAGE_SIZE, dataset_lo
     #model.add(UpSampling2D((1)))
     model.add(Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax'))
     return model
-"""
+
 
 tf.keras.backend.clear_session()
 #model = create_segmentation_model()
@@ -144,39 +146,45 @@ model = tf.keras.models.Sequential(
         Input(shape=(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE, 1)),
         # layers.Lambda(lambda x: tf.expand_dims(x, axis=-1)),
 
-        Conv2D(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2D(64, (3, 3), activation='relu', padding='same'),
         BatchNormalization(),
-        MaxPooling2D(4, 4),
+        MaxPooling2D(2, 2),
 
-        # layers.Conv2D(256, (3, 3), activation='relu', padding='same'),
-        Conv2D(512, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2D(128, (3, 3), activation='relu', padding='same'),
         BatchNormalization(),
-        MaxPooling2D(4, 4),
+        MaxPooling2D(2, 2),
 
-        # layers.Conv2D(512, (3, 3), activation='relu', padding='same'),
-        # layers.BatchNormalization(),
-        # layers.MaxPooling2D(4, 4),
+        Conv2D(256, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2, 2),
+
+        Conv2D(512, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
 
         Dropout(0.3),
-
         # layers.UpSampling2D(4),
         # layers.Conv2DTranspose(512, (3, 3), activation='relu', padding='same'),
         # layers.BatchNormalization(),
-        Conv2D(1024, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2D(512, (3, 3), activation='relu', padding='same'),
+        Dropout(0.3),
         BatchNormalization(),
-        UpSampling2D(4),
+        UpSampling2D(2),
         # layers.Conv2DTranspose(256, (3, 3), activation='relu', padding='same'),
-        Conv2DTranspose(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        Conv2DTranspose(256, (3, 3), activation='relu', padding='same'),
         BatchNormalization(),
 
-        UpSampling2D(4),
-        Conv2DTranspose(256, (KERNEL_SIZE, KERNEL_SIZE), activation='relu', padding='same'),
+        UpSampling2D(2),
+        Conv2DTranspose(128, (3, 3), activation='relu', padding='same'),
+        BatchNormalization(),
+
+        UpSampling2D(2),
+        Conv2DTranspose(64, (3, 3), activation='relu', padding='same'),
         BatchNormalization(),
 
         Conv2D(dataset_loader.COCO_NUM_CLASSES, 1, activation='softmax')
     ]
 )
-
+"""
 
 resize_and_rescale = tf.keras.Sequential([
     tf.keras.layers.Resizing(dataset_loader.IMAGE_SIZE, dataset_loader.IMAGE_SIZE),
@@ -229,7 +237,37 @@ model = tf.keras.models.Sequential(
         # Conv2D(3, 1, activation='softmax')
     ]
 )"""
+UNET_BASE = 32
+def build_unet(input_shape=(None, None, 1), num_classes=9):
+    inputs = Input(shape=input_shape)
 
+    # Encoder
+    c1 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(inputs)
+    c1 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(c1)
+    p1 = MaxPooling2D()(c1)
+
+    c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(p1)
+    c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(c2)
+    p2 = MaxPooling2D()(c2)
+
+    # Bottleneck
+    b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(p2)
+    b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(b)
+
+    # Decoder
+    u1 = UpSampling2D()(b)
+    u1 = tf.keras.layers.concatenate([u1, c2])
+    c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(u1)
+    c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(c3)
+
+    u2 = UpSampling2D()(c3)
+    u2 = tf.keras.layers.concatenate([u2, c1])
+    c4 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(u2)
+    c4 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(c4)
+
+    outputs = Conv2D(num_classes, 1, activation='softmax')(c4)
+    return Model(inputs, outputs)
+model = build_unet()
 print("model created")
 
 model.summary()
@@ -237,37 +275,37 @@ plot_model(model, show_shapes=True)
 
 # Compile the model with the masked loss
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=3e-4),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     loss=weighted_sparse_categorical_crossentropy,
     #metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES), TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
     metrics=[WeightedMeanIoU(), SparseCategoricalAccuracy()]
 )
 
-model.save("models/optimus_0.keras")
+model.save("models/unet32green_0.keras")
 
-counter = 0
-loss_list = []
-val_loss_list = []
-SMIoU_list = []
-val_SMIoU_list = []
+counter = START_EPOCH
+loss_list = list()
+val_loss_list = list()
+SMIoU_list = list()
+val_SMIoU_list = list()
 while counter < TOTAL_EPOCHS:
     tf.keras.backend.clear_session()
-    model = tf.keras.models.load_model(f'models/optimus_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
+    model = tf.keras.models.load_model(f'models/unet32green_{counter}.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES)})
     history = model.fit(
 
         coco_train,
         steps_per_epoch = STEPS_PER_EPOCH,
         epochs=EPOCHS,
         validation_data=coco_val,
-        validation_steps = val_steps//4
+        validation_steps = val_steps//9
     )
 
     counter += EPOCHS
-    model.save(f"models/optimus_{counter}.keras")
-    loss_list.append(np.mean(history.history['loss']))
-    val_loss_list.append(history.history['val_loss'])
-    val_SMIoU_list.append(history.history['val_weighted_mean_iou'])
-    SMIoU_list.append(np.mean(history.history['weighted_mean_iou']))
+    model.save(f"models/unet32green_{counter}.keras")
+    loss_list += history.history['loss']
+    val_loss_list+=history.history['val_loss']
+    val_SMIoU_list+=history.history['val_weighted_mean_iou']
+    SMIoU_list+=history.history['weighted_mean_iou']
 plt.plot(loss_list, label="loss")
 plt.plot(val_loss_list, label="val_loss")
 plt.legend()
@@ -290,79 +328,18 @@ def evaluate_all_models(model_dir):
 
         try:
             if model_name.endswith('.keras'):
-                model = tf.keras.models.load_model(model_path, custom_objects={'dice_loss': dice_loss, 'segmentationmeaniou': SegmentationMeanIoU(num_classes=9), 'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1])})
+                model = tf.keras.models.load_model(model_path, custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, 'dice_loss': dice_loss, 'segmentationmeaniou': SegmentationMeanIoU(num_classes=9), 'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1])})
             else:
                 print(f"Skipping unsupported file: {model_name}")
                 continue
 
             print(f"Evaluating model: {model_name}")
-            loss, acc = model.evaluate(coco_val)
-            print(f"  → Loss: {loss:.4f}, Accuracy: {acc:.4f}\n")
+            loss, acc = model.evaluate(coco_val.take(val_steps))
 
         except Exception as e:
             print(f"Error loading {model_name}: {e}")
 
 # Run the evaluation
 evaluate_all_models(model_dir)
-exit()
-#model = tf.keras.models.load_model('models/st32_30.keras', custom_objects={'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1]})
-print("model loaded")
+exit()"""
 
-model.evaluate(coco_val)
-print("model evaluated")
-
-
-
-""""""
-# Training set distribution
-train_true_list = []
-for _, masks in tqdm.tqdm(coco_train_and_test.take(train_steps), desc="Training Labels"):
-    flat = tf.reshape(masks, [-1]).numpy()
-    train_true_list.append(flat)
-train_true = np.concatenate(train_true_list)
-print("Training label distribution:", Counter(train_true))
-
-# Validation set distribution
-val_true_list = []
-for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="Validation Labels"):
-    flat = tf.reshape(masks, [-1]).numpy()
-    val_true_list.append(flat)
-val_true = np.concatenate(val_true_list)
-print("Validation label distribution:", Counter(val_true))
-"""
-
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-y_true_list = []
-for _, masks in tqdm.tqdm(coco_val.take(val_steps), desc="a"):
-    flat = tf.reshape(masks, [-1]).numpy()  # shape (batch*H*W,)
-    y_true_list.append(flat)
-
-
-y_pred_list = []
-for batch_preds in tqdm.tqdm(model.predict(coco_val.take(val_steps)), desc="b"):
-    preds_flat = np.argmax(batch_preds, axis=-1).reshape(-1)  # (batch*H*W,)
-    y_pred_list.append(preds_flat)
-
-y_true = np.concatenate(y_true_list)
-y_pred = np.concatenate(y_pred_list)
-
-num_classes = len(dflu.coco_rgb_labels)  # 9
-y_pred = np.clip(y_pred, 0, num_classes - 1)
-y_true = np.clip(y_true, 0, num_classes - 1)
-
-# Compute confusion matrix with all classes
-cm = confusion_matrix(y_true, y_pred, labels=np.arange(num_classes))  # Include all labels 0–8
-
-# Use all label names
-used_label_names = dflu.coco_rgb_labels  # All 9 labels
-
-cm_log = np.log1p(cm)
-
-# Plot
-fig, ax = plt.subplots(figsize=(10, 10))
-disp = ConfusionMatrixDisplay(confusion_matrix=cm_log, display_labels=used_label_names)
-disp.plot(include_values=False, xticks_rotation=90, cmap='Blues', ax=ax)
-plt.title("Confusion Matrix")
-plt.grid(False)
-plt.tight_layout()
-plt.show()
