@@ -230,18 +230,14 @@ def precompute_images(
 #     return ds.repeat()
 
 
+# """
 def rgb_to_label_map(img):
     r, g, b = tf.cast(img[..., 0], dtype=tf.float32), tf.cast(img[..., 1], dtype=tf.float32), tf.cast(img[..., 2], dtype=tf.float32)
     mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
-    max_rgb = np.max(mean_rgb.numpy())
-    if max_rgb < 1:
-        min_rgb = 15.0/255.0
-    else:
-        min_rgb = 15
     # Define all conditions in one go
     conditions = [
-        mean_rgb > max_rgb*0.95,  # light
-        mean_rgb < min_rgb,  # dark
+        mean_rgb > (230 / 255.0),  # light
+        mean_rgb < (20 / 255.0),  # dark
         (r * 0.7 - mean_rgb) > 0,  # red
         (g * 0.7 - mean_rgb) > 0,  # green
         (b * 0.75 - mean_rgb) > 0,  # blue
@@ -255,6 +251,7 @@ def rgb_to_label_map(img):
     for cond, label in zip(conditions[::-1], labels[::-1]):  # Reverse for precedence
         label_map = tf.where(cond, label, label_map)
     return label_map
+# """
 
 
 def coco_RGB_dataset_precomputed(split='train', channels=3, tfrecord_path=None):
