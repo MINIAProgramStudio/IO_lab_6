@@ -239,7 +239,8 @@ def rgb_to_label_map(img):
         max_rgb = 2.8
         min_rgb = 0.004*40
     else:
-        min_rgb = 15
+        min_rgb = 40
+        max_rgb = 255*2.8
     # Define all conditions in one go
     conditions = [
         r+b+g > max_rgb,  # light
