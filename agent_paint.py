@@ -116,9 +116,15 @@ model = tf.keras.Model(inputs=input_gray, outputs=output)
 """
 
 input_gray = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE, 1))  # (None, 128, 128, 1)
-input_mask = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE, 3))  # (None, 128, 128, 3)
+input_mask = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE))  # (None, 128, 128)
 
-x = layers.Concatenate(axis=-1)([input_gray, input_mask])  # (None, 128, 128, 4)
+rgb_mask = tf.gather(dflu.coco_rgb_colors_tf, input_mask)  # (?, 128, 128, 3)
+rgb_mask = (tf.cast(rgb_mask, tf.float32) / 255)  # (?, 128, 128, 3)
+d3_gray = tf.concat([input_gray for _ in range(3)], axis=3)  # (?, 128, 128, 3)
+image_with_mask = d3_gray * rgb_mask  # (?, 128, 128, 3)
+image_with_mask = tf.image.rgb_to_hsv(image_with_mask)
+
+x = layers.Concatenate(axis=-1)([input_gray, image_with_mask])  # (None, 128, 128, 4)
 
 x = layers.Conv2D(64, (3, 3), padding='same')(x)
 x = layers.BatchNormalization()(x)
