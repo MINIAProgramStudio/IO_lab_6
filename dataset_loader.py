@@ -236,7 +236,7 @@ def rgb_to_label_map(img):
     max_rgb = np.max(r.numpy()+g.numpy()+b.numpy())
     if max_rgb <= 4:
         max_rgb = 2.8
-        min_rgb = 0.004*20
+        min_rgb = 0.004*40
     else:
         max_rgb = 255*2.8
         min_rgb = 40
