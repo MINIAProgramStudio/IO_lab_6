@@ -233,7 +233,14 @@ def precompute_images(
 # """
 def rgb_to_label_map(img):
     r, g, b = tf.cast(img[..., 0], dtype=tf.float32), tf.cast(img[..., 1], dtype=tf.float32), tf.cast(img[..., 2], dtype=tf.float32)
-    mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
+    #mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
+    max_rgb = np.max(r.numpy()+g.numpy()+b.numpy())
+    if max_rgb <= 4:
+        max_rgb = 2.8
+        min_rgb = 0.004*40
+    else:
+        max_rgb = 255*2.8
+        min_rgb = 40
     # Define all conditions in one go
     conditions = [
         mean_rgb > (230 / 255.0),  # light
