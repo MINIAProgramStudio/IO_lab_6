@@ -9,14 +9,14 @@ import datasets_from_loader_utils as dflu
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from PythonTableConsole import PythonTableConsole as PTC
-
 from some_functions import *
+
 # --- Configuration ---
-MODEL_PATH = 'models/optimus_560.keras'
-IMAGE_PATH = 'datasets/plane.jpg'
+MODEL_PATH = 'models/unet32green_50.keras'
+IMAGE_PATH = 'datasets/melon.jpg'
 IMAGE_SIZE = dataset_loader.IMAGE_SIZE
 
-# --- Load model (grayscale input) ---
+# --- Load model ---
 model = load_model(
     MODEL_PATH,
     custom_objects={
@@ -25,51 +25,57 @@ model = load_model(
     }
 )
 
-# --- Load & preprocess as GRAYSCALE ---
+# --- Load & preprocess grayscale image ---
 gray = cv2.imread(IMAGE_PATH, cv2.IMREAD_GRAYSCALE)
 if gray is None:
     raise FileNotFoundError(f"Could not load image: {IMAGE_PATH}")
-# Resize
 gray = cv2.resize(gray, (IMAGE_SIZE, IMAGE_SIZE))
-
-# Normalize
 gray_norm = gray.astype('float32') / 255.0
-
-# Add channel and batch dims -> (1, H, W, 1)
 inp_gray = gray_norm[..., np.newaxis][np.newaxis, ...]
-print(f"Model input shape: {inp_gray.shape}")  # (1, 32, 32, 1)
 
-
-image = inp_gray  # shape: (1, H, W, channels)
-logits = model.predict(image)
+# --- Predict ---
+logits = model.predict(inp_gray)
 print(PTC(logits[0][0].tolist()))
-predicted_classes = tf.argmax(logits, axis=3)  # shape: (1, H, W)
-predicted_matrix = predicted_classes[0].numpy()
+predicted_classes = tf.argmax(logits, axis=3)[0].numpy()
 print()
-table = PTC(predicted_matrix.tolist())
-print(table)
+print(PTC(predicted_classes.tolist()))
 
-
-def plot_class_matrix(predicted_matrix, num_classes, class_names=dflu.coco_rgb_labels):
-    plt.figure(figsize=(6,6))
-    cmap = plt.get_cmap('tab20', num_classes)  # discrete colormap with num_classes colors
-    im = plt.imshow(predicted_matrix, cmap=cmap, vmin=0, vmax=num_classes - 1)
-    plt.colorbar(im, ticks=np.arange(num_classes))
-
-    if class_names:
-        # Optional: show colorbar ticks with class names (if not too many)
-        im.colorbar.set_ticks(np.arange(num_classes))
-        im.colorbar.set_ticklabels(class_names)
-
-    plt.title("Predicted Class Matrix")
-    plt.axis('off')
-    plt.show()
+# --- Prepare RGB image for visualization ---
 img_bgr = cv2.imread(IMAGE_PATH)
-img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)  # Convert BGR -> RGB
-
+img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 img_resized = cv2.resize(img_rgb, (IMAGE_SIZE, IMAGE_SIZE))
-plt.imshow(img_resized)
-plt.show()
-plot_class_matrix(predicted_matrix, 9)
-plot_class_matrix(dataset_loader.rgb_to_label_map(img_resized), 9)
 
+# --- Ground truth label matrix ---
+gt_labels = dataset_loader.rgb_to_label_map(img_resized)
+
+# --- Convert label map to RGB mask using coco_rgb_colors ---
+def label_to_rgb(mask, color_map):
+    """
+    Convert a 2D label map (H x W) into a 3D RGB image (H x W x 3) using a color map.
+    """
+    return color_map[mask]
+
+# --- Create RGB masks ---
+gt_rgb_mask = label_to_rgb(gt_labels, dflu.coco_rgb_colors)
+pred_rgb_mask = label_to_rgb(predicted_classes, dflu.coco_rgb_colors)
+
+# --- Plot all three side by side ---
+fig, axes = plt.subplots(1, 3, figsize=(18, 8))
+
+# Original RGB image
+axes[0].imshow(img_resized)
+axes[0].set_title("Original Image (RGB)")
+axes[0].axis('off')
+
+# Ground Truth Mask
+axes[1].imshow(gt_rgb_mask.astype(np.uint8))
+axes[1].set_title("Ground Truth Mask (RGB)")
+axes[1].axis('off')
+
+# Predicted Mask
+axes[2].imshow(pred_rgb_mask.astype(np.uint8))
+axes[2].set_title("Predicted Mask (RGB)")
+axes[2].axis('off')
+
+plt.tight_layout()
+plt.show()
