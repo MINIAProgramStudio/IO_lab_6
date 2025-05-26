@@ -30,8 +30,8 @@ from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_data
 
 import dataset_loader
 
-coco_weights = [0.7, 0.7, 1, 1, 1, 0.5, 0.5, 0.5, 0.2]
-
+coco_weights = [1, 1, 1, 0.001, 1, 1, 1, 1, 1]
+coco_green_weights = [1, 1, 1, 0.001, 1, 1, 1, 1, 1]
 class WeightedMeanIoU(tf.keras.metrics.Metric):
 
     def __init__(self, num_classes=9, class_weights=coco_weights, name="weighted_mean_iou", **kwargs):
