@@ -239,18 +239,17 @@ def rgb_to_label_map(img):
         max_rgb = 2.8
         min_rgb = 0.004*40
     else:
-        max_rgb = 255*2.8
-        min_rgb = 40
+        min_rgb = 15
     # Define all conditions in one go
     conditions = [
-        mean_rgb > (230 / 255.0),  # light
-        mean_rgb < (20 / 255.0),  # dark
-        (r * 0.7 - mean_rgb) > 0,  # red
-        (g * 0.7 - mean_rgb) > 0,  # green
-        (b * 0.75 - mean_rgb) > 0,  # blue
-        (r * 1.12 - mean_rgb) < 0,  # cyan
-        (b * 1.265 - mean_rgb) < 0,  # yellow
-        (g * 1.14 - mean_rgb) < 0  # magenta
+        r+b+g > max_rgb,  # light
+        r+b+g < min_rgb,  # dark
+        r*1.2 > b+g,  # red
+        g*1.7 > r+b,  # green
+        b*1.6 > r+g,  # blue
+        r*1.8 < b+g,  # cyan
+        b*1.75 < r+g,  # yellow
+        g*1.8 < r+b  # magenta
     ]
     labels = [0, 1, 2, 3, 4, 5, 6, 7]
 
