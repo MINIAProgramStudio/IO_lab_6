@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 dl.IMAGE_SIZE = 128
 dl.BATCH_SIZE = 64
 EPOCHS = 3
-
+"""
 AGENT1_MODELS = "models/Agent1/"
 # AGENT1_MODEL_NAME = "max128_5_12.keras"
 AGENT1_MODEL_NAME = "max128_5_12.keras"
@@ -28,20 +28,17 @@ custom_objects = {
     # 'weighted_sparse_categorical_crossentropy': sf.weighted_sparse_categorical_crossentropy,
     'WeightedMeanIoU': sf.WeightedMeanIoU(num_classes=dl.COCO_NUM_CLASSES)
 }
-
+"""
 AGENT2_MODELS = "models/Agent2/"
 count = len(os.listdir(AGENT2_MODELS))
 
-MODEL_PATH = AGENT1_MODELS + AGENT1_MODEL_NAME
-# MODEL_SAVE_PATH = AGENT2_MODELS + "test{count}".format(count=count) + "_e{epoch:02d}_l{val_loss:.4f}_m{val_mae:.4f}.keras"
+# MODEL_PATH = AGENT1_MODELS + AGENT1_MODEL_NAME
 MODEL_SAVE_PATH = AGENT2_MODELS + "test{count}".format(count=count) + "_e{epoch:02d}_l{val_loss:.4f}.keras"
-MODEL_LOAD_PATH = AGENT2_MODELS + "test32_e02_l0.1288.keras"
-# print(MODEL_PATH)
-# print(MODEL_SAVE_PATH)
+MODEL_LOAD_PATH = AGENT2_MODELS + "test1_e03_l0.1530.keras"
 
-TFRECORD_PATH_TRAIN = "tfrecords/Agent2_train.tfrecord"  # 128x128 train precomputed images and masks
+TFRECORD_PATH_TRAIN = "tfrecords/Agent2_train_hsv.tfrecord"  # 128x128 train precomputed images and masks
 # TFRECORD_PATH_TRAIN = "tfrecords/train_32.tfrecord"  # 32x32 train precomputed images and masks
-TFRECORD_PATH_VAL = "tfrecords/Agent2_val.tfrecord"  # 128x128 test precomputed images and masks
+TFRECORD_PATH_VAL = "tfrecords/Agent2_val_hsv.tfrecord"  # 128x128 test precomputed images and masks
 # TFRECORD_PATH_VAL = "tfrecords/val_32.tfrecord"  # 32x32 test precomputed images and masks
 
 # TRAIN_STEPS, VAL_STEPS = dl.coco_steps()
@@ -49,10 +46,12 @@ TFRECORD_PATH_VAL = "tfrecords/Agent2_val.tfrecord"  # 128x128 test precomputed 
 TRAIN_STEPS, VAL_STEPS = 10, 10
 
 ## LOAD MODEL FROM AGENT 1
+"""
 msh_model = tf.keras.models.load_model(
     MODEL_PATH,
     custom_objects=custom_objects
 )
+"""
 
 ## LOAD TRAIN AND VAL DATASETS TODO: ADD RGB IMAGES IF THIS IS NECESSARY
 coco_train = dl.coco_RGB_dataset_precomputed_agent2(
@@ -64,6 +63,7 @@ coco_val = dl.coco_RGB_dataset_precomputed_agent2(
 )#.take(VAL_STEPS)
 
 ## CREATE MODEL FOR AGENT 2
+"""
 # TODO: CHECK IF THIS IS NECESSARY
 resize_and_rescale = tf.keras.Sequential([
   tf.keras.layers.Resizing(dl.IMAGE_SIZE, dl.IMAGE_SIZE),
@@ -75,6 +75,7 @@ data_augmentation = tf.keras.Sequential([
   tf.keras.layers.RandomFlip("horizontal_and_vertical"),
   tf.keras.layers.RandomZoom(0.2),
 ])
+# """
 
 # TODO: RECEIVE GRAYSCALE IMAGE, PREDICT MASK USING AGENT 1 MODEL, MAKE RGB IMAGE USING AGENT 2 MODEL TAKING GRAYSCALE IMAGE AND MASK AS BASE, BUT GENERETE RGB IMAGE BY ITSELF
 """
@@ -113,10 +114,11 @@ hs = layers.Conv2D(2, (1, 1), activation='sigmoid')(x)  # Hue and Saturation (No
 output = layers.Concatenate(axis=3)([hs, input_gray])  # (None, 128, 128, 3)
 # output = layers.Lambda(lambda x: tf.image.hsv_to_rgb(x))(hsv)  # (None, 128, 128, 3)
 model = tf.keras.Model(inputs=input_gray, outputs=output)
-"""
+# """
 
+# """
 input_gray = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE, 1))  # (None, 128, 128, 1)
-input_mask = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE))  # (None, 128, 128)
+input_mask = layers.Input(shape=(dl.IMAGE_SIZE, dl.IMAGE_SIZE), dtype=tf.int32)  # (None, 128, 128)
 
 rgb_mask = tf.gather(dflu.coco_rgb_colors_tf, input_mask)  # (?, 128, 128, 3)
 rgb_mask = (tf.cast(rgb_mask, tf.float32) / 255)  # (?, 128, 128, 3)
@@ -141,35 +143,38 @@ x = layers.Activation('relu')(x)
 hs = layers.Conv2D(2, (1, 1), activation='sigmoid')(x)  # Hue and Saturation (None, 128, 128, 2)
 output = layers.Concatenate(axis=3)([hs, input_gray])  # (None, 128, 128, 3)
 model = tf.keras.Model(inputs=[input_gray, input_mask], outputs=output)
+# """
 
 
-# x = layers.Conv2D(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same')(x)
+"""
+x = layers.Conv2D(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same')(x)
+x = layers.BatchNormalization()(x)
+x = layers.MaxPooling2D(2, 2)(x)
+
+x = layers.Conv2D(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same')(x)
+x = layers.BatchNormalization()(x)
+x = layers.MaxPooling2D(4, 4)(x)
+
+x = layers.Dropout(0.3)(x)
+
+x = layers.UpSampling2D(4)(x)
+x = layers.Conv2DTranspose(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same')(x)
+x = layers.BatchNormalization()(x)
+
+x = layers.UpSampling2D(2)(x)
+# x = layers.Conv2D(dl.IMAGE_SIZE // 2, (5, 5), activation='relu', padding='same')(x)
 # x = layers.BatchNormalization()(x)
-# x = layers.MaxPooling2D(2, 2)(x)
 
-# x = layers.Conv2D(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same')(x)
-# x = layers.BatchNormalization()(x)
-# x = layers.MaxPooling2D(4, 4)(x)
-
-# x = layers.Dropout(0.3)(x)
-
-# x = layers.UpSampling2D(4)(x)
-# x = layers.Conv2DTranspose(dl.IMAGE_SIZE, (5, 5), activation='relu', padding='same')(x)
+# x = layers.Conv2D(dl.IMAGE_SIZE // 4, (5, 5), activation='relu', padding='same')(x)
 # x = layers.BatchNormalization()(x)
 
-# x = layers.UpSampling2D(2)(x)
-# # x = layers.Conv2D(dl.IMAGE_SIZE // 2, (5, 5), activation='relu', padding='same')(x)
-# # x = layers.BatchNormalization()(x)
+# x = layers.Conv2D(dl.IMAGE_SIZE // 8, (5, 5), activation='relu', padding='same')(x)
+# x = layers.BatchNormalization()(x)
 
-# # x = layers.Conv2D(dl.IMAGE_SIZE // 4, (5, 5), activation='relu', padding='same')(x)
-# # x = layers.BatchNormalization()(x)
+output = layers.Conv2D(3, 1, activation='softmax')(x)
 
-# # x = layers.Conv2D(dl.IMAGE_SIZE // 8, (5, 5), activation='relu', padding='same')(x)
-# # x = layers.BatchNormalization()(x)
-
-# output = layers.Conv2D(3, 1, activation='softmax')(x)
-
-# model = tf.keras.Model(inputs=input_gray, outputs=output)
+model = tf.keras.Model(inputs=input_gray, outputs=output)
+"""
 
 """
 model = tf.keras.models.Sequential(
@@ -216,21 +221,6 @@ model.summary()
 """
 
 
-# def ImageQuality(y_true, y_pred):
-#     return tf.image.psnr(y_true, y_pred, max_val=1.0)
-
-
-# def PerceptualSimilarity(y_true, y_pred):
-#     return tf.image.ssim(y_true, y_pred, max_val=1.0)
-
-
-# def combined_loss(y_true, y_pred):
-#     mse = tf.reduce_mean(tf.square(y_true - y_pred))
-#     ssim = 1 - tf.reduce_mean(PerceptualSimilarity(y_true, y_pred))
-#     psnr = tf.reduce_mean(1/(ImageQuality(y_true, y_pred) + 1e-10))
-#     return 0.5 * mse + 0.2 * ssim + 0.3 * psnr
-
-
 # TODO: VALIDATE MODEL
 # """
 model.compile(
@@ -271,10 +261,12 @@ history = model.fit(
     callbacks=callbacks
 )
 # """
+"""
 model = tf.keras.models.load_model(
     MODEL_LOAD_PATH,
-    custom_objects={"combined_loss": combined_loss}
+    custom_objects={"combined_loss_agent2": sf.combined_loss_agent2}
 )
+# """
 
 ## DISPLAY HISTORY
 """
@@ -330,7 +322,10 @@ for file_name in images:
 
     image = np.expand_dims(image, axis=0)/255
 
-    rgb_pred = model.predict(image)
+    mask = dl.rgb_to_label_map(image_)
+    mask = np.expand_dims(mask, axis=0)
+    print(mask.shape)
+    rgb_pred = model.predict([image, mask])
     rgb_pred = tf.image.hsv_to_rgb(rgb_pred)
 
     plt.subplot(1, 2, 2)

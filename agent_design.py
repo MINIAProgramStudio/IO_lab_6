@@ -54,33 +54,33 @@ def agent1_process(image: Image.Image, model_name: str) -> Image.Image:
     # st.image(image_with_mask)
     # draw = ImageDraw.Draw(image_with_mask)
     # draw.text((10, 10), f"Agent 1: {model_name}", fill="red")
-    return image_with_mask
+    return image_with_mask, mask
 
 
-# def agent2_process(image: Image.Image, image_with_mask: Image.Image, model_name: str) -> Image.Image:
-#     model = tf.keras.models.load_model(
-#         f"./models/Agent2/{model_name}",
-#         custom_objects={
-#             'combined_loss': sf.combined_loss_agent2,
-#         }
-#     )
+def agent2_process(image: Image.Image, mask: Image.Image, model_name: str) -> Image.Image:
+    model = tf.keras.models.load_model(
+        f"./models/Agent2/{model_name}",
+        custom_objects={
+            'combined_loss_agent2': sf.combined_loss_agent2,
+        }
+    )
 
-#     img = image.copy()
+    img = image.copy()
 
-#     img_true_hsv = model.predict(tf.expand_dims(img, 0))[0]  # (128, 128, 1) -> (128, 128, 3)
-#     img_true_rgb = tf.image.hsv_to_rgb(img_true_hsv)
+    img_true_hsv = model.predict([tf.expand_dims(img, 0), tf.expand_dims(mask, 0)])[0]  # (128, 128, 1) -> (128, 128, 3)
+    img_true_rgb = tf.image.hsv_to_rgb(img_true_hsv).numpy()
 
-#     st.image(img_true_rgb)
-#     # draw = ImageDraw.Draw(img_true_rgb)
-#     # w, h = img.size
-#     # draw.text((10, h - 30), f"Agent 2: {model_name}", fill="blue")
-#     return img_true_rgb
+    # st.image(img_true_rgb)
+    # draw = ImageDraw.Draw(img_true_rgb)
+    # w, h = img.size
+    # draw.text((10, h - 30), f"Agent 2: {model_name}", fill="blue")
+    return img_true_rgb
 
 
 def mother_agent(image, model1, model2, train=None, val=None):
-    image_with_mask = agent1_process(image, model1)
-    # image_rgb = agent2_process(image, image_with_mask, model2)
-    return image_with_mask
+    image_with_mask, mask = agent1_process(image, model1)
+    image_rgb = agent2_process(image, mask, model2)
+    return image_with_mask, image_rgb
 
 # 🗂️ Helper to list files and directories
 def list_files(folder, endswith=None):
@@ -160,16 +160,20 @@ if st.session_state.step == "upload":
 
 if st.session_state.step == "review":
     st.markdown(f"## Input image with: \n##### Agent 1: {selected_agent1} \n##### Agent 2: {selected_agent2}")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("### 🖼️ Original Images")
+        st.markdown("### Original Images")
         for img in st.session_state.input_images:
-            st.image(img, width=300)
+            st.image(img)
 
     with col2:
-        st.markdown("### ✅ Processed Images")
+        st.markdown("### Images Agent 1")
         for img in st.session_state.processed_images:
-            st.image(img, width=300)
+            st.image(img[0])
+    with col3:
+        st.markdown("### Images Agent 2")
+        for img in st.session_state.processed_images:
+            st.image(img[1])
 
     st.markdown("Does the output suit you?")
 
