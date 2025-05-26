@@ -58,7 +58,7 @@ def write_tfrecord_for_images_and_masks(image_dir, output_tfrecord_path, channel
             img = tf.image.decode_jpeg(img, channels=3)
             img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
             img = tf.cast(img, tf.float32) / 255.0
-            label_map = rgb_to_label_map(img)
+            label_map = rgb_to_hsv_to_label_map(img)
             if channels == 1:
                 img = tf.image.rgb_to_grayscale(img)
 
@@ -81,7 +81,7 @@ def write_tfrecord_for_images(image_dir, output_tfrecord_path):
         for img_file in img_files:
             img_path = os.path.join(image_dir, img_file)
             img_rgb = read_reshape_normalise(img_path)
-            image_mask = rgb_to_label_map(img_rgb)
+            image_mask = rgb_to_hsv_to_label_map(img_rgb)
             img_gray = tf.image.rgb_to_grayscale(img_rgb)
             img_rgb = tf.image.rgb_to_hsv(img_rgb)
 
@@ -260,6 +260,25 @@ def rgb_to_label_map(img):
     return label_map
 # """
 
+
+def rgb_to_hsv_to_label_map(img):
+    hsv = tf.image.rgb_to_hsv(img)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    conditions = [
+        tf.logical_and(s < 0.1, v > 0.9),  # light
+        v < 0.3,  # dark
+        tf.logical_or(h < 1/12, h > 11/12),  # red
+        tf.math.abs(h-1/3) < 1/12,  # green
+        tf.math.abs(h-2/3) < 1/12,  # blue
+        tf.math.abs(h-1/2) < 1/12,  # cyan
+        tf.math.abs(h-1/8) < 1/12,  # yellow
+        tf.math.abs(h-5/6) < 1/12  # magenta
+    ]
+    labels = [0, 1, 2, 3, 4, 5, 6, 7]
+    label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
+    for cond, label in zip(conditions[::-1], labels[::-1]):  # Reverse for precedence
+        label_map = tf.where(cond, label, label_map)
+    return label_map
 
 def coco_RGB_dataset_precomputed(split='train', channels=3, tfrecord_path=None):
     if tfrecord_path is None:
