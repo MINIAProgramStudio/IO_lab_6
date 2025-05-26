@@ -18,23 +18,44 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 ## PARAMETERS
 dl.IMAGE_SIZE = 128
 dl.BATCH_SIZE = 64
-EPOCHS = 3
-"""
+EPOCHS = 20
+
 AGENT1_MODELS = "models/Agent1/"
 # AGENT1_MODEL_NAME = "max128_5_12.keras"
-AGENT1_MODEL_NAME = "max128_5_12.keras"
+AGENT1_MODEL_NAME = "unet32hsv_500.keras"
 custom_objects = {
     'weighted_combined_loss': sf.weighted_combined_loss,
     # 'weighted_sparse_categorical_crossentropy': sf.weighted_sparse_categorical_crossentropy,
-    'WeightedMeanIoU': sf.WeightedMeanIoU(num_classes=dl.COCO_NUM_CLASSES)
+    'WeightedMeanIoU': sf.WeightedMeanIoU(num_classes=dl.COCO_NUM_CLASSES),
+    "weighted_sparse_categorical_crossentropy": sf.weighted_sparse_categorical_crossentropy
 }
 """
+print("precomputing train")
+dl.precompute_images(
+    img_dir=dl.coco_train_img_dir,
+    output_tfrecord_path='FAILSAFE.tfrecord'
+)
+print("precomputing val")
+dl.precompute_images(
+    img_dir=dl.coco_val_img_dir,
+    output_tfrecord_path='FAILSAFE.tfrecord'
+)"""
+print("precomputed")
 AGENT2_MODELS = "models/Agent2/"
 count = len(os.listdir(AGENT2_MODELS))
 
-# MODEL_PATH = AGENT1_MODELS + AGENT1_MODEL_NAME
+AGENT1_PATH = AGENT1_MODELS + AGENT1_MODEL_NAME
+try:
+    Agent1 = model = tf.keras.models.load_model(
+        AGENT1_PATH,
+        custom_objects=custom_objects
+    )
+except:
+    tf.keras.backend.clear_session()
+    print("W I am agent_paint.py Failed to load Agent1")
+
 MODEL_SAVE_PATH = AGENT2_MODELS + "test{count}".format(count=count) + "_e{epoch:02d}_l{val_loss:.4f}.keras"
-MODEL_LOAD_PATH = AGENT2_MODELS + "test1_e03_l0.1530.keras"
+MODEL_LOAD_PATH = AGENT2_MODELS + "test1_e13_l0.1055.keras"
 
 TFRECORD_PATH_TRAIN = "tfrecords/Agent2_train_hsv.tfrecord"  # 128x128 train precomputed images and masks
 # TFRECORD_PATH_TRAIN = "tfrecords/train_32.tfrecord"  # 32x32 train precomputed images and masks
@@ -43,7 +64,7 @@ TFRECORD_PATH_VAL = "tfrecords/Agent2_val_hsv.tfrecord"  # 128x128 test precompu
 
 # TRAIN_STEPS, VAL_STEPS = dl.coco_steps()
 # DATASET_RATIO = 400  # 1/?
-TRAIN_STEPS, VAL_STEPS = 10, 10
+TRAIN_STEPS, VAL_STEPS = 50, 10
 
 ## LOAD MODEL FROM AGENT 1
 """
@@ -262,6 +283,7 @@ callbacks = [
         save_freq='epoch'
     )
 ]
+"""
 history = model.fit(
     coco_train,
     epochs=EPOCHS,
@@ -270,16 +292,16 @@ history = model.fit(
     validation_steps=VAL_STEPS,
     callbacks=callbacks
 )
-# """
-"""
+ """
+
 model = tf.keras.models.load_model(
     MODEL_LOAD_PATH,
     custom_objects={"combined_loss_agent2": sf.combined_loss_agent2}
 )
-# """
+
 
 ## DISPLAY HISTORY
-"""
+
 def display_history(history, names, title):
     plt.figure()
     plt.title(title)
@@ -291,11 +313,11 @@ def display_history(history, names, title):
     plt.show()
 
 
-display_history(history, ['loss', 'val_loss'], "Loss")
+#display_history(history, ['loss', 'val_loss'], "Loss")
 # display_history(history, ['accuracy', 'val_accuracy'], "Accuracy")
-display_history(history, ['mae', 'val_mae'], "MeanAbsoluteError")
-display_history(history, ['ImageQuality', 'val_ImageQuality'], "ImageQuality")
-"""
+#display_history(history, ['mae', 'val_mae'], "MeanAbsoluteError")
+#display_history(history, ['ImageQuality', 'val_ImageQuality'], "ImageQuality")
+
 
 
 ## Check model performance
@@ -303,14 +325,11 @@ display_history(history, ['ImageQuality', 'val_ImageQuality'], "ImageQuality")
 count = 0
 images = []
 # images = os.listdir("datasets/test2017")
-images.insert(0, "charley.jpg")
 images.insert(0, "untitl34ed.png")
 images.insert(0, "NewYearSkelet.jpg")
 images.insert(0, "kode-lgx-dr-ghostx.jpg")
 images.insert(0, "lemon.jpg")
 images.insert(0, "melon.jpg")
-images.insert(0, "plane.jpg")
-images.insert(0, "apple.jpg")
 for file_name in images:
     try:
         image_ = cv2.imread("datasets\\test2017\\" + file_name, cv2.IMREAD_COLOR_RGB)
@@ -331,9 +350,14 @@ for file_name in images:
     plt.axis("off")
 
     image = np.expand_dims(image, axis=0)/255
-
-    mask = dl.rgb_to_label_map(image_)
-    mask = np.expand_dims(mask, axis=0)
+    mask = None
+    #try:
+    mask = Agent1.predict(tf.expand_dims(tf.image.rgb_to_grayscale(image_), 0))
+    mask = tf.argmax(mask, axis = 3)
+    """except:
+        print("W I am agent_paint.py Failed to use Agent1 model to predict labels for examples")
+        mask = dl.rgb_to_label_map(image_)
+        mask = np.expand_dims(mask, axis=0)"""
     print(mask.shape)
     rgb_pred = model.predict([image, mask])
     rgb_pred = tf.image.hsv_to_rgb(rgb_pred)
