@@ -202,7 +202,7 @@ def combined_loss_agent2(y_true, y_pred):
     mse = tf.reduce_mean(tf.square(y_true - y_pred))
     ssim = 1 - tf.reduce_mean(PerceptualSimilarity(y_true, y_pred))
     psnr = tf.reduce_mean(1/(ImageQuality(y_true, y_pred) + 1e-10))
-    return 0.5 * mse + 0.2 * ssim + 0.3 * psnr
+    return 1 * mse + 1 * ssim + 1 * psnr
 
 def combined_loss_agent2_v2(y_true, y_pred):
     mse = tf.reduce_mean(tf.square(y_true[0] - y_pred[0]))*0.6
