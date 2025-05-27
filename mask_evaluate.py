@@ -60,7 +60,7 @@ coco_val = dataset_loader.coco_RGB_dataset_precomputed(
 )
 
 
-model = tf.keras.models.load_model('models/Agent1/unet48hsv_e164_l0.6135.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, 'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1])})
+model = tf.keras.models.load_model('models/Agent1/unet48hsv_e79_l0.6199.keras', custom_objects={'weighted_sparse_categorical_crossentropy': weighted_sparse_categorical_crossentropy, 'weighted_combined_loss': weighted_combined_loss, "WeightedMeanIoU": WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES, weights = [0.7, 0.7, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.1])})
 print("model loaded")
 
 model.evaluate(coco_val.take(val_steps))
