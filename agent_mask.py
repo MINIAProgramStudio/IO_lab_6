@@ -36,22 +36,24 @@ from some_functions import *
 import numpy as np
 
 import dataset_loader
+train_steps, val_steps = dataset_loader.coco_cardinality()
 import datasets_from_loader_utils as dflu
 
 BAD_MODEL_COEFFICIENT = 1 # reduces model size
-STEPS_PER_EPOCH = 90
+TRAIN_STEPS = train_steps
+VAL_STEPS = val_steps
 dataset_loader.BATCH_SIZE = 96
 dataset_loader.IMAGE_SIZE = 128
 #EPOCHS = 25
 #START_EPOCH = 0
 TOTAL_EPOCHS = 2000
 AGENT1_MODELS = "models/Agent1/"
-MODEL_SAVE_PATH = AGENT1_MODELS + "unet64hsv_e{epoch:02d}_l{val_loss:.4f}.keras"
+MODEL_SAVE_PATH = AGENT1_MODELS + "unet32drop_e{epoch:02d}_l{val_loss:.4f}.keras"
 #tf.debugging.set_log_device_placement(True)
 
 
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
-"""Ы
+"""
 print("precomputing train")
 train_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='train',
@@ -70,7 +72,7 @@ val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
 exit()"""
 print("creating datasets")
 # Create datasets
-train_steps, val_steps = dataset_loader.coco_cardinality()
+
 coco_train = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
@@ -240,34 +242,47 @@ model = tf.keras.models.Sequential(
         # Conv2D(3, 1, activation='softmax')
     ]
 )"""
-UNET_BASE = 64
+UNET_BASE = 32
+DROPOUT = 0.1
 def build_unet(input_shape=(None, None, 1), num_classes=9):
     inputs = Input(shape=input_shape)
 
     # Encoder
     c1 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(inputs)
+    c1 = Dropout(DROPOUT)(c1)
     c1 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(c1)
     p1 = MaxPooling2D()(c1)
 
-    c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(p1)
+    d1 = Dropout(DROPOUT)(p1)
+
+    c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(d1)
+    c2 = Dropout(DROPOUT)(c2)
     c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(c2)
     p2 = MaxPooling2D()(c2)
 
+    d2 = Dropout(DROPOUT)(p2)
+
     # Bottleneck
-    b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(p2)
+    b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(d2)
+    b = Dropout(DROPOUT)(b)
     b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(b)
 
     # Decoder
     u1 = UpSampling2D()(b)
     u1 = tf.keras.layers.concatenate([u1, c2])
-    c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(u1)
+    ub = Dropout(DROPOUT)(u1)
+    c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(ub)
+    c3 = Dropout(DROPOUT)(c3)
     c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(c3)
 
-    u2 = UpSampling2D()(c3)
+    d3 = Dropout(DROPOUT)(c3)
+
+    u2 = UpSampling2D()(d3)
     u2 = tf.keras.layers.concatenate([u2, c1])
     c4 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(u2)
+    c4 = Dropout(DROPOUT)(c4)
     c4 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(c4)
-
+    c4 = Dropout(DROPOUT)(c4)
     outputs = Conv2D(num_classes, 1, activation='softmax')(c4)
     return Model(inputs, outputs)
 model = build_unet()
@@ -333,9 +348,9 @@ callbacks = [
 history = model.fit(
     coco_train,
     epochs=TOTAL_EPOCHS,
-    steps_per_epoch=STEPS_PER_EPOCH,
+    steps_per_epoch=TRAIN_STEPS,
     validation_data=coco_val,
-    validation_steps=val_steps//3,
+    validation_steps=VAL_STEPS,
     callbacks=callbacks
 )
 
