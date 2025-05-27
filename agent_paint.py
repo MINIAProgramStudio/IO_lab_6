@@ -352,8 +352,8 @@ for file_name in images:
     image = np.expand_dims(image, axis=0)/255
     mask = None
     #try:
-    mask = Agent1.predict(tf.expand_dims(tf.image.rgb_to_grayscale(image_), 0))
-    mask = tf.argmax(mask, axis = 3)
+    mask = Agent1.predict(image)
+    mask = np.argmax(mask, axis = 3)
     """except:
         print("W I am agent_paint.py Failed to use Agent1 model to predict labels for examples")
         mask = dl.rgb_to_label_map(image_)
