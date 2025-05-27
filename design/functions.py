@@ -2,28 +2,33 @@ from .agents import mother_agent
 
 import tensorflow as tf
 import streamlit as st
+from PIL import Image
+from io import BytesIO
+import base64
 import json
 import os
-import io
 
 
-# 1. TODO: FIX DOWNLOAD BUTTON
 def _download():
     if st.button("✅ Yes, download"):
-        buf = io.BytesIO()
-        st.session_state.processed_image.save(buf, format="PNG")
-        st.download_button(
-            label="Download Processed Image",
-            data=buf.getvalue(),
-            file_name="processed_image.png",
-            mime="image/png",
-        )
+        st.session_state.step = "download"
+        st.experimental_rerun()
 
 
 def _upload():
     if st.button("🔁 No, upload new"):
         st.session_state.step = "upload"
         st.experimental_rerun()
+
+
+def image_to_base64(image):
+    buffered = BytesIO()
+    if isinstance(image, Image.Image):
+        image.save(buffered, format="PNG")
+    else:
+        img = Image.open(image)
+        img.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode()
 
 
 def reproccess_images():

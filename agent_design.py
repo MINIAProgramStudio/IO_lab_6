@@ -1,7 +1,7 @@
 import design as des
 import some_functions as sf
-import datasets_from_loader_utils as dflu
 import dataset_loader as dl
+import datasets_from_loader_utils as dflu
 
 import streamlit as st
 import os
@@ -12,7 +12,7 @@ if (
     and os.path.exists("./tfrecords/Agent2_val_hsv.tfrecord")
     and ("dataset_agent1" not in st.session_state
          or "dataset_agent2" not in st.session_state)
-):    
+):
     dl.BATCH_SIZE = 32
     VAL_STEPS = 2
     st.session_state.dataset_agent1 = dl.coco_RGB_dataset_precomputed(
@@ -35,13 +35,13 @@ st.session_state.custom_objects = {
 st.title("Drawer")
 st.write()
 
-des.settings()
-
 if "step" not in st.session_state:
     st.session_state.dict = {
         "upload": des.upload,
-        "review": des.review
+        "review": des.review,
+        "download": des.download
     }
     st.session_state.step = "upload"
 
+des.settings()
 st.session_state.dict.get(st.session_state.step)()
