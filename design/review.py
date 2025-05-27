@@ -13,7 +13,7 @@ def review():
     )
 
     # 2. TODO: PERCENTAGE OF USER DISPLAY, NOT WIDTH
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.markdown("### Original Images")
         for img in st.session_state.input_images:
@@ -24,6 +24,14 @@ def review():
         for img in st.session_state.processed_images:
             st.image(img[0], width=128)
     with col3:
+        st.markdown("### Only Mask Agent 1")
+        for img in st.session_state.processed_images:
+            st.image(img[2], width=128)
+    with col4:
+        st.markdown("### Ruleset")
+        for img in st.session_state.input_images3:
+            st.image(img, width=128)
+    with col5:
         st.markdown("### Images Agent 2")
         for img in st.session_state.processed_images:
             st.image(img[1], width=128)

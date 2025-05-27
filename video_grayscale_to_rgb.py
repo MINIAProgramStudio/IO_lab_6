@@ -135,7 +135,7 @@ def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME
 
     # Resize output frames back to original size and write video
     for rgb_frame in tqdm(rgb_frames, desc="Writing output"):
-        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h))  #, interpolation=cv2.INTER_CUBIC
+        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_CUBIC)  #, interpolation=cv2.INTER_CUBIC
         rgb_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_RGB2BGR)
         out.write(rgb_upscaled)
     out.release()

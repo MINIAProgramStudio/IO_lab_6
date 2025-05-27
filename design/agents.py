@@ -52,4 +52,4 @@ def agent2_process(image: np.ndarray, mask: np.ndarray, model_name: str) -> np.n
 def mother_agent(image: np.ndarray, model1: str, model2: str):
     image_with_mask, mask = agent1_process(image, model1)
     image_rgb = agent2_process(image, mask, model2)
-    return image_with_mask, image_rgb
+    return image_with_mask, image_rgb, st.session_state.rgb_colors[mask]
