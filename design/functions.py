@@ -4,8 +4,11 @@ import tensorflow as tf
 import streamlit as st
 from PIL import Image
 from io import BytesIO
+import subprocess
+import tempfile
 import base64
 import json
+import sys
 import os
 
 
@@ -39,6 +42,30 @@ def reproccess_images():
             st.session_state.selected_agent2
         ) for img in st.session_state.input_images
     ]
+
+
+def reproccess_videos():
+    processed_video_paths = []
+    for file in st.session_state.input_videos:
+        save_path = os.path.join("temp_videos", file.name)
+        os.makedirs("temp_videos", exist_ok=True)
+        with open(save_path, "wb") as f:
+            f.write(file.read())
+
+        with st.spinner("Processing video..."):
+            subprocess.run([
+                sys.executable, "connector_design_video.py",
+                save_path,
+                save_path + "_result.mp4",
+                st.session_state.selected_agent1,
+                st.session_state.selected_agent2
+            ])
+            print("Done")
+        processed_video_paths.append({
+            "name": file.name,
+            "path": save_path + "_result.mp4"
+        })
+    st.session_state.processed_videos = processed_video_paths
 
 
 def list_files(folder, endswith=".keras"):
@@ -75,9 +102,9 @@ def find_smallest_loss(folder: list, agent_index: int):
                 try:
                     match agent_index:
                         case 1:
-                            loss = model.evaluate(st.session_state.dataset_agent1)
+                            loss = model.evaluate(st.session_state.dataset_agent1)[0]
                         case 2:
-                            loss = model.evaluate(st.session_state.dataset_agent2)
+                            loss = model.evaluate(st.session_state.dataset_agent2)[0]
                 except Exception as e:
                     print(f"Failed to evaluate {model_name}, error: {e}")
                     loss = float("inf")

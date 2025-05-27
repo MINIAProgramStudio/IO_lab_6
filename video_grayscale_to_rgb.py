@@ -17,7 +17,7 @@ from functools import partial
 import cv2
 
 AGENT1_NAME = "unet48hsv_e164_l0.6135.keras"
-AGENT2_NAME = "test11_e09_l0.5296.keras"
+AGENT2_NAME = "test45_e65_l0.0939.keras"
 input_path = 'demonstrator_video/The Arrival of a Train at La Ciotat Station - Lumière Brothers - 1896 3 4.mp4'
 output_path = 'demonstrator_video/output_video_3.mp4'
 custom_objects = {
@@ -93,7 +93,7 @@ def preprocess_frame(frame):
     return gray
 
 # Batch inference and postprocessing
-def infer_and_postprocess(gray_frames, batch_size=32):
+def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
     results = []
     for i in tqdm(range(0, len(gray_frames), batch_size), desc="Running inference"):
         batch = gray_frames[i:i+batch_size]
@@ -107,7 +107,8 @@ def infer_and_postprocess(gray_frames, batch_size=32):
         results.extend(rgb_uint8)
     return results
 
-def main():
+
+def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME: str, AGENT2_NAME: str) -> None:
     cap = cv2.VideoCapture(input_path)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -130,15 +131,17 @@ def main():
         gray_frames = list(tqdm(pool.imap(preprocess_frame, frames), total=len(frames), desc="Preprocessing"))
 
     # Inference (assume infer_and_postprocess returns list of RGB frames 128x128 uint8)
-    rgb_frames = infer_and_postprocess(gray_frames, batch_size=32)
+    rgb_frames = infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=8)
 
     # Resize output frames back to original size and write video
     for rgb_frame in tqdm(rgb_frames, desc="Writing output"):
-        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_LINEAR)
+        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h))  #, interpolation=cv2.INTER_CUBIC
+        rgb_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_RGB2BGR)
         out.write(rgb_upscaled)
     out.release()
 
     print(f"✅ Done! Video written to: {output_path}")
 
+
 if __name__ == "__main__":
-    main()
+    create_video_from_gray_to_rgb(input_path, output_path, AGENT1_NAME, AGENT2_NAME)

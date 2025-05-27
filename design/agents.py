@@ -1,6 +1,12 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
+import os
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+# devices = tf.config.list_physical_devices("GPU")
+# tf.config.set_visible_devices(devices[1:])
 
 
 def agent1_process(image: np.ndarray, model_name: str) -> np.ndarray:

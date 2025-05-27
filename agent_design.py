@@ -2,6 +2,8 @@ import design as des
 import some_functions as sf
 import dataset_loader as dl
 import datasets_from_loader_utils as dflu
+# from video_grayscale_to_rgb import create_video_from_gray_to_rgb as cvgr
+
 
 import streamlit as st
 import os
@@ -29,6 +31,8 @@ st.session_state.rgb_colors = dflu.coco_rgb_colors
 st.session_state.custom_objects = {
     name: getattr(sf, name) for name in sf.__all__
 }
+
+# st.session_state.video_creator = cvgr
 
 
 # st.set_page_config(layout="centered")
