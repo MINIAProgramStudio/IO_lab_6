@@ -8,3 +8,4 @@ logs
 *.keras
 *.tfrecord
 *.json
+*.pyc
