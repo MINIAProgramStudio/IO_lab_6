@@ -1,36 +1,11 @@
-from logging import WARNING
-
 import tensorflow as tf
-import matplotlib.pyplot as plt
-import os
-import tqdm
-from numpy.core.memmap import dtypedescr
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Input
-from tensorflow.keras.layers import BatchNormalization
-from tensorflow.keras.layers import Activation
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import UpSampling2D
-
-from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.utils import plot_model
-from tensorflow.keras.metrics import TopKCategoricalAccuracy
-
-from keras.optimizers import Adam
-from keras.losses import CategoricalCrossentropy, BinaryCrossentropy, SparseCategoricalCrossentropy
-import keras
-
-from pycocotools.coco import COCO
-from tensorflow.python.ops.gen_experimental_dataset_ops import data_service_dataset
+from keras.losses import SparseCategoricalCrossentropy
 
 import dataset_loader
 
 coco_weights = [1, 1e-4, 1, 1, 1, 1, 0.2, 1, 1]
+
+
 class WeightedMeanIoU(tf.keras.metrics.Metric):
 
     def __init__(self, num_classes=9, class_weights=coco_weights, name="weighted_mean_iou", **kwargs):
@@ -89,13 +64,12 @@ def dice_loss(y_true, y_pred, smooth=1e-6):
     dice = (2. * intersection + smooth) / (union + smooth)
     return 1 - tf.reduce_mean(dice)  # mean over all classes
 
+
 @tf.function
 def combined_loss(y_true, y_pred):
     ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
     d = dice_loss(y_true, y_pred)
     return ce + d
-
-
 
 
 @tf.function
@@ -128,6 +102,7 @@ def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6
 
     return 1 - tf.reduce_sum(weighted_dice) / tf.reduce_sum(class_weights)
 
+
 @tf.function
 def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
     """
@@ -148,6 +123,8 @@ def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
 
 
 tf_weights = tf.constant(coco_weights, dtype=tf.float32)  # Example weights for 9 classes
+
+
 @tf.function
 def weighted_sparse_categorical_crossentropy(y_true, y_pred):
     loss_fn = SparseCategoricalCrossentropy(from_logits=False)
@@ -204,9 +181,13 @@ def combined_loss_agent2(y_true, y_pred):
     psnr = tf.reduce_mean(1/(ImageQuality(y_true, y_pred) + 1e-10))
     return 1 * mse + 1 * ssim + 1 * psnr
 
+
 def combined_loss_agent2_v2(y_true, y_pred):
     mse = tf.reduce_mean(tf.square(y_true[0] - y_pred[0]))*0.6
     mse += (tf.reduce_mean(y_true[1]-y_pred[1]) * tf.reduce_mean(y_true[1] + 0.1 - y_pred[1]))*0.4
     ssim = 1 - tf.reduce_mean(PerceptualSimilarity(y_true, y_pred))
     psnr = tf.reduce_mean(1 / (ImageQuality(y_true, y_pred) + 1e-10))
     return 0.5 * mse + 0.2 * ssim + 0.3 * psnr
+
+
+__all__ = ["WeightedMeanIoU", "dice_loss", "combined_loss", "weighted_dice_loss", "weighted_combined_loss", "weighted_sparse_categorical_crossentropy", "SegmentationMeanIoU", "ImageQuality", "PerceptualSimilarity", "combined_loss_agent2", "combined_loss_agent2_v2"]

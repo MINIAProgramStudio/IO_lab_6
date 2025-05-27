@@ -1,10 +1,9 @@
-val2017
-datasets
 .idea
 .venv
-__pycache__/dataset_loader.cpython-310.pyc
-__pycache__/datasets_from_loader_utils.cpython-310.pyc
-*.keras
+
+datasets
 logs
+*__pycache__*
+
+*.keras
 *.tfrecord
-__pycache__/some_functions.cpython-310.pyc
