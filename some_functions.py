@@ -46,7 +46,7 @@ class WeightedMeanIoU(tf.keras.metrics.Metric):
         self.confusion_matrix.assign(tf.zeros_like(self.confusion_matrix))
 
 
-@tf.function
+
 def dice_loss(y_true, y_pred, smooth=1e-6):
     # y_true: (batch, h, w)     — int32 labels in [0, num_classes)
     # y_pred: (batch, h, w, c)  — float32 softmax probabilities
@@ -65,14 +65,14 @@ def dice_loss(y_true, y_pred, smooth=1e-6):
     return 1 - tf.reduce_mean(dice)  # mean over all classes
 
 
-@tf.function
+
 def combined_loss(y_true, y_pred):
     ce = tf.keras.losses.sparse_categorical_crossentropy(y_true, y_pred)
     d = dice_loss(y_true, y_pred)
     return ce + d
 
 
-@tf.function
+
 def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6):
     """
     Weighted Dice loss for multi-class segmentation.
@@ -103,7 +103,7 @@ def weighted_dice_loss(y_true, y_pred, class_weights = coco_weights, smooth=1e-6
     return 1 - tf.reduce_sum(weighted_dice) / tf.reduce_sum(class_weights)
 
 
-@tf.function
+
 def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
     """
     Combined weighted cross-entropy and weighted dice loss.
@@ -125,7 +125,7 @@ def weighted_combined_loss(y_true, y_pred, class_weights = coco_weights):
 tf_weights = tf.constant(coco_weights, dtype=tf.float32)  # Example weights for 9 classes
 
 
-@tf.function
+
 def weighted_sparse_categorical_crossentropy(y_true, y_pred):
     loss_fn = SparseCategoricalCrossentropy(from_logits=False)
     pixel_weights = tf.gather(tf_weights, y_true)
@@ -183,8 +183,8 @@ def combined_loss_agent2(y_true, y_pred):
 
 
 def combined_loss_agent2_v2(y_true, y_pred):
-    mse = tf.reduce_mean(tf.square(y_true[0] - y_pred[0]))*0.6
-    mse += (tf.reduce_mean(y_true[1]-y_pred[1]) * tf.reduce_mean(y_true[1] + 0.1 - y_pred[1]))*0.4
+    mse = tf.reduce_mean(tf.square(y_true[0] - y_pred[0]))*0.4
+    mse += (tf.reduce_mean(y_true[1]+0.1-y_pred[1]) * tf.reduce_mean(y_true[1] + 0.3 - y_pred[1]))*0.6
     ssim = 1 - tf.reduce_mean(PerceptualSimilarity(y_true, y_pred))
     psnr = tf.reduce_mean(1 / (ImageQuality(y_true, y_pred) + 1e-10))
     return 0.5 * mse + 0.2 * ssim + 0.3 * psnr
