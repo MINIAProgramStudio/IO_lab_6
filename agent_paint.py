@@ -17,15 +17,14 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 ## PARAMETERS
 dl.IMAGE_SIZE = 128
-dl.BATCH_SIZE = 96
-EPOCHS = 100
+dl.BATCH_SIZE = 32
+EPOCHS = 6
 
 AGENT1_MODELS = "models/Agent1/"
 # AGENT1_MODEL_NAME = "max128_5_12.keras"
 AGENT1_MODEL_NAME = "unet48hsv_e164_l0.6135.keras"
 custom_objects = {
     'weighted_combined_loss': sf.weighted_combined_loss,
-    # 'weighted_sparse_categorical_crossentropy': sf.weighted_sparse_categorical_crossentropy,
     'WeightedMeanIoU': sf.WeightedMeanIoU(num_classes=dl.COCO_NUM_CLASSES),
     "weighted_sparse_categorical_crossentropy": sf.weighted_sparse_categorical_crossentropy,
     'combined_loss_agent2_v2': sf.combined_loss_agent2_v2
@@ -65,7 +64,7 @@ TFRECORD_PATH_VAL = "tfrecords/Agent2_val_hsv.tfrecord"  # 128x128 test precompu
 
 # TRAIN_STEPS, VAL_STEPS = dl.coco_steps()
 # DATASET_RATIO = 400  # 1/?
-TRAIN_STEPS, VAL_STEPS = 50, 10
+TRAIN_STEPS, VAL_STEPS = 10, 10
 
 ## LOAD MODEL FROM AGENT 1
 """
@@ -153,24 +152,25 @@ x = layers.Concatenate(axis=-1)([input_gray, image_with_mask])  # (None, 128, 12
 
 x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
-x = layers.Activation('relu')(x)
+x = layers.Activation('elu')(x)
 
 x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
-x = layers.Activation('relu')(x)
+x = layers.Activation('elu')(x)
 
 x = layers.Conv2D(128, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
-x = layers.Activation('relu')(x)
+x = layers.Activation('elu')(x)
 
 x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
-x = layers.Activation('relu')(x)
+x = layers.Activation('elu')(x)
 
 x = layers.Conv2D(64, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
-x = layers.Activation('relu')(x)
+x = layers.Activation('elu')(x)
 
+# output = layers.Conv2D(3, (1, 1), activation='sigmoid')(x)  # Hue and Saturation (None, 128, 128, 2)
 hs = layers.Conv2D(2, (1, 1), activation='sigmoid')(x)  # Hue and Saturation (None, 128, 128, 2)
 output = layers.Concatenate(axis=3)([hs, input_gray])  # (None, 128, 128, 3)
 model = tf.keras.Model(inputs=[input_gray, input_mask], outputs=output)
@@ -256,7 +256,7 @@ model = tf.keras.models.Sequential(
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     # loss='mse',
-    loss=sf.combined_loss_agent2_v2,
+    loss=sf.combined_loss_agent2,
     # metrics=[
     #     'mae',
     #     ImageQuality,
@@ -284,7 +284,7 @@ callbacks = [
         save_freq='epoch'
     )
 ]
-"""
+# """
 history = model.fit(
     coco_train,
     epochs=EPOCHS,
@@ -293,12 +293,14 @@ history = model.fit(
     validation_steps=VAL_STEPS,
     callbacks=callbacks
 )
+# """
 
 """
 model = tf.keras.models.load_model(
     MODEL_LOAD_PATH,
-    custom_objects={"combined_loss_agent2": sf.combined_loss_agent2, 'combined_loss_agent2_v2': sf.combined_loss_agent2_v2}
+    custom_objects=custom_objects
 )
+# """
 
 
 ## DISPLAY HISTORY
