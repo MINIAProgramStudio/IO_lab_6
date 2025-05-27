@@ -22,7 +22,7 @@ EPOCHS = 20
 
 AGENT1_MODELS = "models/Agent1/"
 # AGENT1_MODEL_NAME = "max128_5_12.keras"
-AGENT1_MODEL_NAME = "unet32hsv_500.keras"
+AGENT1_MODEL_NAME = "unet48hsv_e164_l0.6135.keras"
 custom_objects = {
     'weighted_combined_loss': sf.weighted_combined_loss,
     # 'weighted_sparse_categorical_crossentropy': sf.weighted_sparse_categorical_crossentropy,
@@ -292,13 +292,13 @@ history = model.fit(
     validation_steps=VAL_STEPS,
     callbacks=callbacks
 )
- """
+
 
 model = tf.keras.models.load_model(
     MODEL_LOAD_PATH,
     custom_objects={"combined_loss_agent2": sf.combined_loss_agent2}
 )
-
+ """
 
 ## DISPLAY HISTORY
 
@@ -351,13 +351,13 @@ for file_name in images:
 
     image = np.expand_dims(image, axis=0)/255
     mask = None
-    #try:
-    mask = Agent1.predict(image)
-    mask = np.argmax(mask, axis = 3)
-    """except:
+    try:
+        mask = Agent1.predict(image)
+        mask = np.argmax(mask, axis = 3)
+    except:
         print("W I am agent_paint.py Failed to use Agent1 model to predict labels for examples")
         mask = dl.rgb_to_label_map(image_)
-        mask = np.expand_dims(mask, axis=0)"""
+        mask = np.expand_dims(mask, axis=0)
     print(mask.shape)
     rgb_pred = model.predict([image, mask])
     rgb_pred = tf.image.hsv_to_rgb(rgb_pred)
