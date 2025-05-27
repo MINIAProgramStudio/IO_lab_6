@@ -39,12 +39,14 @@ import dataset_loader
 import datasets_from_loader_utils as dflu
 
 BAD_MODEL_COEFFICIENT = 1 # reduces model size
-STEPS_PER_EPOCH = 45
+STEPS_PER_EPOCH = 90
 dataset_loader.BATCH_SIZE = 96
 dataset_loader.IMAGE_SIZE = 128
-EPOCHS = 25
-START_EPOCH = 0
-TOTAL_EPOCHS = 500
+#EPOCHS = 25
+#START_EPOCH = 0
+TOTAL_EPOCHS = 2000
+AGENT1_MODELS = "models/Agent1/"
+MODEL_SAVE_PATH = AGENT1_MODELS + "unet48hsv_e{epoch:02d}_l{val_loss:.4f}.keras"
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -238,7 +240,7 @@ model = tf.keras.models.Sequential(
         # Conv2D(3, 1, activation='softmax')
     ]
 )"""
-UNET_BASE = 32
+UNET_BASE = 48
 def build_unet(input_shape=(None, None, 1), num_classes=9):
     inputs = Input(shape=input_shape)
 
@@ -282,8 +284,8 @@ model.compile(
     metrics=[WeightedMeanIoU(), SparseCategoricalAccuracy()]
 )
 
-model.save("models/unet32hsv_0.keras")
-
+model.save("models/Agent1/unet48hsv_0.keras")
+"""
 counter = START_EPOCH
 loss_list = list()
 val_loss_list = list()
@@ -316,6 +318,29 @@ plt.plot(SMIoU_list, label="weighted_mean_iou")
 plt.plot(val_SMIoU_list, label="val_weighted_mean_iou")
 plt.legend()
 plt.show()
+"""
+callbacks = [
+    tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss',
+        patience=25,
+        restore_best_weights=True
+    ),
+    tf.keras.callbacks.ModelCheckpoint(
+        MODEL_SAVE_PATH,
+        monitor='val_loss',
+        save_best_only=True,
+        save_freq='epoch'
+    )
+]
+history = model.fit(
+    coco_train,
+    epochs=TOTAL_EPOCHS,
+    steps_per_epoch=STEPS_PER_EPOCH,
+    validation_data=coco_val,
+    validation_steps=val_steps//3,
+    callbacks=callbacks
+)
+
 """
 model_dir = 'models/'
 
