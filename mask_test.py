@@ -13,7 +13,7 @@ from some_functions import *
 
 # --- Configuration ---
 MODEL_PATH = 'models/Agent1/unet48hsv_e164_l0.6135.keras'
-IMAGE_PATH = 'datasets/lemon.jpg'
+IMAGE_PATH = 'datasets/plane.jpg'
 IMAGE_SIZE = dataset_loader.IMAGE_SIZE
 
 # --- Load model ---
