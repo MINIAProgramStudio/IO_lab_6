@@ -1,25 +1,8 @@
 from .functions import reproccess_images
+from .functions import _download
+from .functions import _upload
 
 import streamlit as st
-import io
-
-# 1. TODO: FIX DOWNLOAD BUTTON
-def _download():
-    if st.button("✅ Yes, download"):
-        buf = io.BytesIO()
-        st.session_state.processed_image.save(buf, format="PNG")
-        st.download_button(
-            label="Download Processed Image",
-            data=buf.getvalue(),
-            file_name="processed_image.png",
-            mime="image/png",
-        )
-
-
-def _upload():
-    if st.button("🔁 No, upload new"):
-        st.session_state.step = "upload"
-        st.experimental_rerun()
 
 
 def review():
