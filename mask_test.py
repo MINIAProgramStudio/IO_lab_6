@@ -12,7 +12,7 @@ from PythonTableConsole import PythonTableConsole as PTC
 from some_functions import *
 
 # --- Configuration ---
-MODEL_PATH = 'models/unet32hsv_500.keras'
+MODEL_PATH = 'models/Agent1/unet48hsv_e164_l0.6135.keras'
 IMAGE_PATH = 'datasets/lemon.jpg'
 IMAGE_SIZE = dataset_loader.IMAGE_SIZE
 
