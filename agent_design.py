@@ -62,6 +62,7 @@ def agent2_process(image: Image.Image, mask: Image.Image, model_name: str) -> Im
         f"./models/Agent2/{model_name}",
         custom_objects={
             'combined_loss_agent2': sf.combined_loss_agent2,
+            'combined_loss_agent2_v2': sf.combined_loss_agent2_v2
         }
     )
 
@@ -164,16 +165,16 @@ if st.session_state.step == "review":
     with col1:
         st.markdown("### Original Images")
         for img in st.session_state.input_images:
-            st.image(img)
+            st.image(img, width = 128)
 
     with col2:
         st.markdown("### Images Agent 1")
         for img in st.session_state.processed_images:
-            st.image(img[0])
+            st.image(img[0], width = 128)
     with col3:
         st.markdown("### Images Agent 2")
         for img in st.session_state.processed_images:
-            st.image(img[1])
+            st.image(img[1], width = 128)
 
     st.markdown("Does the output suit you?")
 
