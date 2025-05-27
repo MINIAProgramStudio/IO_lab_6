@@ -1,4 +1,5 @@
 from .functions import reproccess_images
+from .functions import reproccess_videos
 from .functions import _download
 from .functions import _upload
 from .functions import image_to_base64
@@ -42,6 +43,25 @@ def review():
     # show_images("Images Agent 1", st.session_state.processed_images, index=0)
     # show_images("Images Agent 2", st.session_state.processed_images, index=1)
 
+    st.markdown("## 🎬 Processed Videos")
+
+    for i, video in enumerate(st.session_state.processed_videos):
+        st.markdown(f"### Video {i + 1}: `{video['name']}`")
+        print(video["path"])
+        video_file = open(video["path"], "rb")
+        video_bytes = video_file.read()
+        st.video(st.session_state.input_videos[i])
+        st.video(video_bytes)
+
+        with open(video["path"], "rb") as f:
+            st.video(f.read())
+            st.download_button(
+                label="⬇ Download",
+                data=f,
+                file_name=f"processed_{video['name']}",
+                mime="video/mp4"
+            )
+
     st.markdown("Does the output suit you?")
 
     if st.session_state.auto_update:
@@ -60,6 +80,7 @@ def review():
         with col2:
             if st.button("🔄 Restart"):
                 reproccess_images()
+                reproccess_videos()
                 st.experimental_rerun()
 
         with col3:
