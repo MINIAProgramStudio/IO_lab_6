@@ -147,26 +147,26 @@ rgb_mask = (tf.cast(rgb_mask, tf.float32) / 255)  # (?, 128, 128, 3)
 d3_gray = tf.concat([input_gray for _ in range(3)], axis=3)  # (?, 128, 128, 3)
 image_with_mask = d3_gray * rgb_mask  # (?, 128, 128, 3)
 image_with_mask = tf.image.rgb_to_hsv(image_with_mask)
-
+MODIFIER = 0.67
 x = layers.Concatenate(axis=-1)([input_gray, image_with_mask])  # (None, 128, 128, 4)
 
-x = layers.Conv2D(64, kernel_size, padding='same')(x)
+x = layers.Conv2D(64//MODIFIER, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('elu')(x)
 
-x = layers.Conv2D(64, kernel_size, padding='same')(x)
+x = layers.Conv2D(64//MODIFIER, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('elu')(x)
 
-x = layers.Conv2D(128, kernel_size, padding='same')(x)
+x = layers.Conv2D(128//MODIFIER, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('elu')(x)
 
-x = layers.Conv2D(64, kernel_size, padding='same')(x)
+x = layers.Conv2D(64//MODIFIER, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('elu')(x)
 
-x = layers.Conv2D(64, kernel_size, padding='same')(x)
+x = layers.Conv2D(64//MODIFIER, kernel_size, padding='same')(x)
 x = layers.BatchNormalization()(x)
 x = layers.Activation('elu')(x)
 
@@ -274,7 +274,7 @@ model.summary()
 callbacks = [
     tf.keras.callbacks.EarlyStopping(
         monitor='val_loss',
-        patience=5,
+        patience=10,
         restore_best_weights=True
     ),
     tf.keras.callbacks.ModelCheckpoint(
@@ -284,7 +284,11 @@ callbacks = [
         save_freq='epoch'
     )
 ]
+<<<<<<< Updated upstream
 # """
+=======
+
+>>>>>>> Stashed changes
 history = model.fit(
     coco_train,
     epochs=EPOCHS,
@@ -300,8 +304,12 @@ model = tf.keras.models.load_model(
     MODEL_LOAD_PATH,
     custom_objects=custom_objects
 )
+<<<<<<< Updated upstream
 # """
 
+=======
+"""
+>>>>>>> Stashed changes
 
 ## DISPLAY HISTORY
 
@@ -316,7 +324,7 @@ def display_history(history, names, title):
     plt.show()
 
 
-#display_history(history, ['loss', 'val_loss'], "Loss")
+display_history(history, ['loss', 'val_loss'], "Loss")
 #display_history(history, ['accuracy', 'val_accuracy'], "Accuracy")
 #display_history(history, ['mae', 'val_mae'], "MeanAbsoluteError")
 #display_history(history, ['ImageQuality', 'val_ImageQuality'], "ImageQuality")

@@ -46,7 +46,7 @@ dataset_loader.IMAGE_SIZE = 128
 #START_EPOCH = 0
 TOTAL_EPOCHS = 2000
 AGENT1_MODELS = "models/Agent1/"
-MODEL_SAVE_PATH = AGENT1_MODELS + "unet48hsv_e{epoch:02d}_l{val_loss:.4f}.keras"
+MODEL_SAVE_PATH = AGENT1_MODELS + "unet64hsv_e{epoch:02d}_l{val_loss:.4f}.keras"
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -240,7 +240,7 @@ model = tf.keras.models.Sequential(
         # Conv2D(3, 1, activation='softmax')
     ]
 )"""
-UNET_BASE = 48
+UNET_BASE = 64
 def build_unet(input_shape=(None, None, 1), num_classes=9):
     inputs = Input(shape=input_shape)
 
@@ -283,8 +283,6 @@ model.compile(
     #metrics=[WeightedMeanIoU(num_classes=dataset_loader.COCO_NUM_CLASSES), TopKCategoricalAccuracy(k=2), SparseCategoricalAccuracy()]
     metrics=[WeightedMeanIoU(), SparseCategoricalAccuracy()]
 )
-
-model.save("models/Agent1/unet48hsv_0.keras")
 """
 counter = START_EPOCH
 loss_list = list()
@@ -322,7 +320,7 @@ plt.show()
 callbacks = [
     tf.keras.callbacks.EarlyStopping(
         monitor='val_loss',
-        patience=25,
+        patience=15,
         restore_best_weights=True
     ),
     tf.keras.callbacks.ModelCheckpoint(

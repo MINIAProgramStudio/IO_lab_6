@@ -16,10 +16,10 @@ from multiprocessing import Pool, cpu_count
 from functools import partial
 import cv2
 
-AGENT1_NAME = "unet32hsv_500.keras"
-AGENT2_NAME = "test45_e65_l0.0939.keras"
-input_path = 'demonstrator_video/A Trip to the Moon (1902) Georges Méliès.mp4'
-output_path = 'demonstrator_video/output_video.mp4'
+AGENT1_NAME = "unet48hsv_e164_l0.6135.keras"
+AGENT2_NAME = "test11_e09_l0.5296.keras"
+input_path = 'demonstrator_video/The Arrival of a Train at La Ciotat Station - Lumière Brothers - 1896 3 4.mp4'
+output_path = 'demonstrator_video/output_video_3.mp4'
 custom_objects = {
     'weighted_combined_loss': sf.weighted_combined_loss,
     # 'weighted_sparse_categorical_crossentropy': sf.weighted_sparse_categorical_crossentropy,
@@ -108,17 +108,15 @@ def infer_and_postprocess(gray_frames, batch_size=32):
     return results
 
 def main():
-    global input_path
-    global output_path
-    target_size = (128, 128)
-
-    # Read frames with progress bar
     cap = cv2.VideoCapture(input_path)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    original_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, target_size)
+    out = cv2.VideoWriter(output_path, fourcc, fps, (original_w, original_h))
 
+    # Read all frames
     frames = []
     for _ in tqdm(range(frame_count), desc="Loading frames"):
         ret, frame = cap.read()
@@ -127,17 +125,19 @@ def main():
         frames.append(frame)
     cap.release()
 
-    # Parallel preprocessing
+    # Preprocess frames in parallel: center crop + grayscale
     with Pool(cpu_count()) as pool:
         gray_frames = list(tqdm(pool.imap(preprocess_frame, frames), total=len(frames), desc="Preprocessing"))
 
-    # Inference
+    # Inference (assume infer_and_postprocess returns list of RGB frames 128x128 uint8)
     rgb_frames = infer_and_postprocess(gray_frames, batch_size=32)
 
-    # Writing output
-    for frame in tqdm(rgb_frames, desc="Writing output"):
-        out.write(frame)
+    # Resize output frames back to original size and write video
+    for rgb_frame in tqdm(rgb_frames, desc="Writing output"):
+        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_LINEAR)
+        out.write(rgb_upscaled)
     out.release()
+
     print(f"✅ Done! Video written to: {output_path}")
 
 if __name__ == "__main__":
