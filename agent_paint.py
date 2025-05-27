@@ -17,8 +17,8 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 ## PARAMETERS
 dl.IMAGE_SIZE = 128
-dl.BATCH_SIZE = 64
-EPOCHS = 20
+dl.BATCH_SIZE = 96
+EPOCHS = 100
 
 AGENT1_MODELS = "models/Agent1/"
 # AGENT1_MODEL_NAME = "max128_5_12.keras"
@@ -27,7 +27,8 @@ custom_objects = {
     'weighted_combined_loss': sf.weighted_combined_loss,
     # 'weighted_sparse_categorical_crossentropy': sf.weighted_sparse_categorical_crossentropy,
     'WeightedMeanIoU': sf.WeightedMeanIoU(num_classes=dl.COCO_NUM_CLASSES),
-    "weighted_sparse_categorical_crossentropy": sf.weighted_sparse_categorical_crossentropy
+    "weighted_sparse_categorical_crossentropy": sf.weighted_sparse_categorical_crossentropy,
+    'combined_loss_agent2_v2': sf.combined_loss_agent2_v2
 }
 """
 print("precomputing train")
@@ -55,7 +56,7 @@ except:
     print("W I am agent_paint.py Failed to load Agent1")
 
 MODEL_SAVE_PATH = AGENT2_MODELS + "test{count}".format(count=count) + "_e{epoch:02d}_l{val_loss:.4f}.keras"
-MODEL_LOAD_PATH = AGENT2_MODELS + "test1_e13_l0.1055.keras"
+MODEL_LOAD_PATH = AGENT2_MODELS + "test22_e09_l0.1095.keras"
 
 TFRECORD_PATH_TRAIN = "tfrecords/Agent2_train_hsv.tfrecord"  # 128x128 train precomputed images and masks
 # TFRECORD_PATH_TRAIN = "tfrecords/train_32.tfrecord"  # 32x32 train precomputed images and masks
@@ -255,7 +256,7 @@ model = tf.keras.models.Sequential(
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
     # loss='mse',
-    loss=sf.combined_loss_agent2,
+    loss=sf.combined_loss_agent2_v2,
     # metrics=[
     #     'mae',
     #     ImageQuality,
@@ -293,12 +294,12 @@ history = model.fit(
     callbacks=callbacks
 )
 
-
+"""
 model = tf.keras.models.load_model(
     MODEL_LOAD_PATH,
-    custom_objects={"combined_loss_agent2": sf.combined_loss_agent2}
+    custom_objects={"combined_loss_agent2": sf.combined_loss_agent2, 'combined_loss_agent2_v2': sf.combined_loss_agent2_v2}
 )
- """
+
 
 ## DISPLAY HISTORY
 
@@ -314,7 +315,7 @@ def display_history(history, names, title):
 
 
 #display_history(history, ['loss', 'val_loss'], "Loss")
-# display_history(history, ['accuracy', 'val_accuracy'], "Accuracy")
+#display_history(history, ['accuracy', 'val_accuracy'], "Accuracy")
 #display_history(history, ['mae', 'val_mae'], "MeanAbsoluteError")
 #display_history(history, ['ImageQuality', 'val_ImageQuality'], "ImageQuality")
 
@@ -330,6 +331,12 @@ images.insert(0, "NewYearSkelet.jpg")
 images.insert(0, "kode-lgx-dr-ghostx.jpg")
 images.insert(0, "lemon.jpg")
 images.insert(0, "melon.jpg")
+
+def label_to_rgb(mask, color_map):
+    """
+    Convert a 2D label map (H x W) into a 3D RGB image (H x W x 3) using a color map.
+    """
+    return color_map[mask]
 for file_name in images:
     try:
         image_ = cv2.imread("datasets\\test2017\\" + file_name, cv2.IMREAD_COLOR_RGB)
@@ -344,7 +351,7 @@ for file_name in images:
 
         image = cv2.imread("datasets\\" + file_name, cv2.IMREAD_GRAYSCALE)
         image = cv2.resize(image, (dl.IMAGE_SIZE, dl.IMAGE_SIZE))
-    plt.subplot(1, 2, 1)
+    plt.subplot(1, 3, 1)
     plt.title("Our RGB")
     plt.imshow(image_)
     plt.axis("off")
@@ -362,7 +369,12 @@ for file_name in images:
     rgb_pred = model.predict([image, mask])
     rgb_pred = tf.image.hsv_to_rgb(rgb_pred)
 
-    plt.subplot(1, 2, 2)
+    plt.subplot(1, 3, 2)
+    plt.title("Mask")
+    plt.imshow(label_to_rgb(mask[0], dflu.coco_rgb_colors))
+    plt.axis("off")
+
+    plt.subplot(1, 3, 3)
     plt.title("Predicted RGB")
     plt.imshow(rgb_pred[0])
     plt.axis("off")
