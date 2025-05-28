@@ -1,3 +1,6 @@
+from itertools import repeat
+from random import random
+
 import cv2
 import numpy as np
 from tqdm import tqdm
@@ -90,7 +93,9 @@ def preprocess_frame(frame):
 # Batch inference and postprocessing
 def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
     results = []
-    for i in tqdm(range(0, len(gray_frames), batch_size), desc="Running inference"):
+    random_id = round(random(), 4)*10000
+    descriptor = "Process " + str(random_id)
+    for i in tqdm(range(0, len(gray_frames), batch_size), desc = descriptor):
         batch = gray_frames[i:i+batch_size]
 
         # Step-by-step expansion to ensure correct shape
@@ -108,6 +113,8 @@ def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
         results.extend(rgb_uint8)
     return results
 
+def infer_and_postprocess_paralel(args):
+    return infer_and_postprocess(*args)
 
 def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME: str, AGENT2_NAME: str) -> None:
     cap = cv2.VideoCapture(input_path)
@@ -128,11 +135,18 @@ def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME
     cap.release()
 
     # Preprocess frames in parallel: center crop + grayscale
-    with Pool(cpu_count()) as pool:
+    with Pool(cpu_count()//2) as pool:
         gray_frames = list(tqdm(pool.imap(preprocess_frame, frames), total=len(frames), desc="Preprocessing"))
 
     # Inference (assume infer_and_postprocess returns list of RGB frames 128x128 uint8)
-    rgb_frames = infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=8)
+    combined_iterable = zip(
+        gray_frames,
+        repeat(AGENT1_NAME),
+        repeat(AGENT2_NAME),
+        repeat(8)
+    )
+    with Pool(cpu_count() // 2) as pool:
+        rgb_frames = list(tqdm(pool.imap(infer_and_postprocess_paralel, combined_iterable, chunksize = len(gray_frames)//(cpu_count()*2)), total=len(frames), desc = "Color prediction"))
 
     # Resize output frames back to original size and write video
     for rgb_frame in tqdm(rgb_frames, desc="Writing output"):

@@ -176,7 +176,6 @@ def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: 
     original_height = img.shape[0]
     original_width = img.shape[1]
     # print(img.shape)
-    print(__name__)
     if not is_video:
         new_height = min(nearest_multiple(original_height, patch_size), st.session_state.height * patch_size)
         new_width = min(nearest_multiple(original_width, patch_size), st.session_state.width * patch_size)
