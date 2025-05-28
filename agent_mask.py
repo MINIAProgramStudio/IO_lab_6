@@ -48,7 +48,7 @@ dataset_loader.IMAGE_SIZE = 128
 #START_EPOCH = 0
 TOTAL_EPOCHS = 2000
 AGENT1_MODELS = "models/Agent1/"
-MODEL_SAVE_PATH = AGENT1_MODELS + "unet64filtered_e{epoch:02d}_l{val_loss:.4f}.keras"
+MODEL_SAVE_PATH = AGENT1_MODELS + "unet32_better_e{epoch:02d}_l{val_loss:.4f}.keras"
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -76,13 +76,13 @@ print("creating datasets")
 coco_train = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
-    tfrecord_path="tfrecords/128filtered_train.tfrecord"
+    tfrecord_path="tfrecords/agent1_better_train.tfrecord"
 )
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
-    tfrecord_path="tfrecords/128filtered_val.tfrecord"
+    tfrecord_path="tfrecords/agent1_better_val.tfrecord"
 )
 print("MS COCO loaded.")
 """
@@ -242,46 +242,47 @@ model = tf.keras.models.Sequential(
         # Conv2D(3, 1, activation='softmax')
     ]
 )"""
-UNET_BASE = 64
-DROPOUT = 0.2
+UNET_BASE = 32
+DROPOUT = 0.1
+KERNEL_SIZE = 3
 def build_unet(input_shape=(None, None, 1), num_classes=9):
     inputs = Input(shape=input_shape)
 
     # Encoder
-    c1 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(inputs)
+    c1 = Conv2D(UNET_BASE, KERNEL_SIZE, activation='relu', padding='same')(inputs)
     c1 = Dropout(DROPOUT)(c1)
-    c1 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(c1)
+    c1 = Conv2D(UNET_BASE, KERNEL_SIZE, activation='relu', padding='same')(c1)
     p1 = MaxPooling2D()(c1)
 
     d1 = Dropout(DROPOUT)(p1)
 
-    c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(d1)
+    c2 = Conv2D(UNET_BASE*2, KERNEL_SIZE, activation='relu', padding='same')(d1)
     c2 = Dropout(DROPOUT)(c2)
-    c2 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(c2)
+    c2 = Conv2D(UNET_BASE*2, KERNEL_SIZE, activation='relu', padding='same')(c2)
     p2 = MaxPooling2D()(c2)
 
     d2 = Dropout(DROPOUT)(p2)
 
     # Bottleneck
-    b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(d2)
+    b = Conv2D(UNET_BASE*4, KERNEL_SIZE, activation='relu', padding='same')(d2)
     b = Dropout(DROPOUT)(b)
-    b = Conv2D(UNET_BASE*4, 3, activation='relu', padding='same')(b)
+    b = Conv2D(UNET_BASE*4, KERNEL_SIZE, activation='relu', padding='same')(b)
 
     # Decoder
     u1 = UpSampling2D()(b)
     u1 = tf.keras.layers.concatenate([u1, c2])
     ub = Dropout(DROPOUT)(u1)
-    c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(ub)
+    c3 = Conv2D(UNET_BASE*2, KERNEL_SIZE, activation='relu', padding='same')(ub)
     c3 = Dropout(DROPOUT)(c3)
-    c3 = Conv2D(UNET_BASE*2, 3, activation='relu', padding='same')(c3)
+    c3 = Conv2D(UNET_BASE*2, KERNEL_SIZE, activation='relu', padding='same')(c3)
 
     d3 = Dropout(DROPOUT)(c3)
 
     u2 = UpSampling2D()(d3)
     u2 = tf.keras.layers.concatenate([u2, c1])
-    c4 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(u2)
+    c4 = Conv2D(UNET_BASE, KERNEL_SIZE, activation='relu', padding='same')(u2)
     c4 = Dropout(DROPOUT)(c4)
-    c4 = Conv2D(UNET_BASE, 3, activation='relu', padding='same')(c4)
+    c4 = Conv2D(UNET_BASE, KERNEL_SIZE, activation='relu', padding='same')(c4)
     c4 = Dropout(DROPOUT)(c4)
     outputs = Conv2D(num_classes, 1, activation='softmax')(c4)
     return Model(inputs, outputs)
@@ -335,7 +336,7 @@ plt.show()
 callbacks = [
     tf.keras.callbacks.EarlyStopping(
         monitor='val_loss',
-        patience=15,
+        patience=4,
         restore_best_weights=True
     ),
     tf.keras.callbacks.ModelCheckpoint(
