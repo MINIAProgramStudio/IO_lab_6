@@ -3,6 +3,7 @@ import os
 from pycocotools.coco import COCO
 
 import numpy as np
+from tqdm import tqdm
 
 import datasets_from_loader_utils as dflu
 
@@ -58,7 +59,7 @@ def write_tfrecord_for_images_and_masks(image_dir, output_tfrecord_path, channel
             img = tf.image.decode_jpeg(img, channels=3)
             img = tf.image.resize(img, (IMAGE_SIZE, IMAGE_SIZE))
             img = tf.cast(img, tf.float32) / 255.0
-            label_map = rgb_to_hsv_to_label_map(img)
+            label_map = rgb_to_hsv_to_label_map_optimized(img)
             if channels == 1:
                 img = tf.image.rgb_to_grayscale(img)
 
@@ -76,12 +77,12 @@ def write_tfrecord_for_images_and_masks(image_dir, output_tfrecord_path, channel
 
 
 def write_tfrecord_for_images(image_dir, output_tfrecord_path):
-    img_files = [f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.jpeg'))]
+    img_files = [f for f in tqdm(os.listdir(image_dir), desc = "loading images") if f.endswith(('.jpg', '.jpeg'))]
     with tf.io.TFRecordWriter(output_tfrecord_path) as writer:
-        for img_file in img_files:
+        for img_file in tqdm(img_files, desc = "precomputing"):
             img_path = os.path.join(image_dir, img_file)
             img_rgb = read_reshape_normalise(img_path)
-            image_mask = rgb_to_hsv_to_label_map(img_rgb)
+            image_mask = rgb_to_hsv_to_label_map_optimized(img_rgb)
             img_gray = tf.image.rgb_to_grayscale(img_rgb)
             img_rgb = tf.image.rgb_to_hsv(img_rgb)
 
@@ -231,6 +232,7 @@ def precompute_images(
 
 
 # """
+@tf.function
 def rgb_to_label_map(img):
     r, g, b = tf.cast(img[..., 0], dtype=tf.float32), tf.cast(img[..., 1], dtype=tf.float32), tf.cast(img[..., 2], dtype=tf.float32)
     #mean_rgb = tf.reduce_mean(tf.cast(img, dtype=tf.float32), axis=-1)
@@ -260,10 +262,11 @@ def rgb_to_label_map(img):
     return label_map
 # """
 
-
+@tf.function
 def rgb_to_hsv_to_label_map(img):
     hsv = tf.image.rgb_to_hsv(img)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+
     conditions = [
         tf.logical_and(s < 0.1, v > 0.9),  # light
         v < 0.3,  # dark
@@ -276,8 +279,30 @@ def rgb_to_hsv_to_label_map(img):
     ]
     labels = [0, 1, 2, 3, 4, 5, 6, 7]
     label_map = tf.ones((IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32) * 8
-    for cond, label in zip(conditions[::-1], labels[::-1]):  # Reverse for precedence
+    for cond, label in zip(conditions, labels):  # Reverse for precedence
         label_map = tf.where(cond, label, label_map)
+    return label_map
+
+@tf.function
+def rgb_to_hsv_to_label_map_optimized(img):
+    hsv = tf.image.rgb_to_hsv(img)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+
+    conds = tf.stack([
+        tf.logical_and(s < 0.2, v > 0.82),                      # light
+        v < 0.15,                                               # dark
+        tf.logical_or(h < 1/13.5, h > 31/32),                    # red
+        tf.math.abs(h - 0.8/3) < 1/6.75,                           # green
+        tf.math.abs(h - 2/3) < 1/11,                           # blue
+        tf.math.abs(h - 1/2) < 1/9,                           # cyan
+        tf.math.abs(h - 1/8) < 1/15,                           # yellow
+        tf.math.abs(h - 5/6) < 1/4                            # magenta
+    ], axis=0)  # shape: (8, H, W)
+
+    # Last class if no condition matches
+    conds = tf.cast(conds, tf.int32)
+    stacked = tf.concat([conds, tf.ones((1, IMAGE_SIZE, IMAGE_SIZE), dtype=tf.int32)], axis=0)  # 9 classes
+    label_map = tf.argmax(stacked, axis=0, output_type=tf.int32)
     return label_map
 
 def coco_RGB_dataset_precomputed(split='train', channels=3, tfrecord_path=None):
