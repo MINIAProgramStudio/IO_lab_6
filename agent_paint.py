@@ -33,14 +33,15 @@ custom_objects = {
 print("precomputing train")
 dl.precompute_images(
     img_dir=dl.coco_train_img_dir,
-    output_tfrecord_path='FAILSAFE.tfrecord'
+    output_tfrecord_path='FAILSAFE_train.tfrecord'
 )
 print("precomputing val")
 dl.precompute_images(
     img_dir=dl.coco_val_img_dir,
-    output_tfrecord_path='FAILSAFE.tfrecord'
-)"""
+    output_tfrecord_path='FAILSAFE_val.tfrecord'
+)
 print("precomputed")
+exit()"""
 AGENT2_MODELS = "models/Agent2/"
 count = len(os.listdir(AGENT2_MODELS))
 
@@ -54,12 +55,12 @@ except:
     tf.keras.backend.clear_session()
     print("W I am agent_paint.py Failed to load Agent1")
 
-MODEL_SAVE_PATH = AGENT2_MODELS + "test{count}".format(count=count) + "_e{epoch:02d}_l{val_loss:.4f}.keras"
+MODEL_SAVE_PATH = AGENT2_MODELS + "maximus_5_e{epoch:02d}_l{val_loss:.4f}.keras"
 MODEL_LOAD_PATH = AGENT2_MODELS + "test22_e09_l0.1095.keras"
 
-TFRECORD_PATH_TRAIN = "tfrecords/Agent2_train_hsv.tfrecord"  # 128x128 train precomputed images and masks
+TFRECORD_PATH_TRAIN = "tfrecords/Agent2_2_train.tfrecord"  # 128x128 train precomputed images and masks
 # TFRECORD_PATH_TRAIN = "tfrecords/train_32.tfrecord"  # 32x32 train precomputed images and masks
-TFRECORD_PATH_VAL = "tfrecords/Agent2_val_hsv.tfrecord"  # 128x128 test precomputed images and masks
+TFRECORD_PATH_VAL = "tfrecords/Agent2_2_val.tfrecord"  # 128x128 test precomputed images and masks
 # TFRECORD_PATH_VAL = "tfrecords/val_32.tfrecord"  # 32x32 test precomputed images and masks
 
 # TRAIN_STEPS, VAL_STEPS = dl.coco_steps()
