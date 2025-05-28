@@ -31,7 +31,7 @@ def calculate_label_distribution(tfrecord_path, channels=1):
 
     return label_counts, label_distribution
 
-tfrecord_path = 'tfrecords/128hsv1_train.tfrecord'  # your precomputed TFRecord path
+tfrecord_path = 'not_reversed_val.tfrecord'  # your precomputed TFRecord path
 counts, distribution = calculate_label_distribution(tfrecord_path)
 
 print("Pixel counts per label:")
