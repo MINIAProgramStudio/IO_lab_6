@@ -3,7 +3,7 @@ from keras.losses import SparseCategoricalCrossentropy
 
 import dataset_loader
 
-coco_weights = [1, 1e-4, 1, 1, 1, 1, 0.2, 1, 1]
+coco_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1]
 
 
 class WeightedMeanIoU(tf.keras.metrics.Metric):
