@@ -48,7 +48,7 @@ dataset_loader.IMAGE_SIZE = 128
 #START_EPOCH = 0
 TOTAL_EPOCHS = 2000
 AGENT1_MODELS = "models/Agent1/"
-MODEL_SAVE_PATH = AGENT1_MODELS + "unet32filtered_e{epoch:02d}_l{val_loss:.4f}.keras"
+MODEL_SAVE_PATH = AGENT1_MODELS + "unet64filtered_e{epoch:02d}_l{val_loss:.4f}.keras"
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -59,17 +59,17 @@ train_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='train',
     train_img_dir=dataset_loader.coco_train_img_dir,
     channels=1,
-    output_tfrecord_path="not_reversed_train.tfrecord"
+    output_tfrecord_path="FAILSAFE.tfrecord"
 )
-"""
+
 print("precomputing val")
 val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='val',
     val_img_dir=dataset_loader.coco_val_img_dir,
     channels=1,
-    output_tfrecord_path="not_reversed_val.tfrecord"
+    output_tfrecord_path="FAILSAFE.tfrecord"
 )
-exit()
+exit()"""
 print("creating datasets")
 # Create datasets
 
@@ -242,8 +242,8 @@ model = tf.keras.models.Sequential(
         # Conv2D(3, 1, activation='softmax')
     ]
 )"""
-UNET_BASE = 32
-DROPOUT = 0.1
+UNET_BASE = 64
+DROPOUT = 0.2
 def build_unet(input_shape=(None, None, 1), num_classes=9):
     inputs = Input(shape=input_shape)
 
