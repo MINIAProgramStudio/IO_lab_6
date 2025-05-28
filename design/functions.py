@@ -181,8 +181,8 @@ def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: 
         new_height = min(nearest_multiple(original_height, patch_size), st.session_state.height * patch_size)
         new_width = min(nearest_multiple(original_width, patch_size), st.session_state.width * patch_size)
     else:
-        new_height = min(nearest_multiple(original_height, patch_size), 2, st.session_state.height * patch_size)
-        new_width = min(nearest_multiple(original_width, patch_size), 4, st.session_state.width * patch_size)
+        new_height = min(nearest_multiple(original_height, patch_size), 2)
+        new_width = min(nearest_multiple(original_width, patch_size), 4)
     # print((new_height, new_width))
     resized_img = cv2.resize(img, (new_width, new_height))
     # resized_img = cv2.cvtColor(resized_img_, cv2.COLOR_RGB2GRAY)
