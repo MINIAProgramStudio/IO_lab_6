@@ -4,6 +4,7 @@
 datasets
 logs
 *__pycache__*
+*temp*
 
 *.keras
 *.tfrecord

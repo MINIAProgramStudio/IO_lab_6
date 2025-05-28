@@ -9,6 +9,7 @@ import streamlit as st
 import os
 
 st.session_state.IMAGE_SIZE = dl.IMAGE_SIZE
+st.session_state.rgb_to_hsv_to_label_map = dl.rgb_to_hsv_to_label_map
 if (
     os.path.exists("./tfrecords/Agent1_val.tfrecord")
     and os.path.exists("./tfrecords/Agent2_val_hsv.tfrecord")

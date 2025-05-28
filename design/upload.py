@@ -1,4 +1,5 @@
-from .agents import mother_agent
+# from .agents import mother_agent
+from .functions import create_image
 
 import streamlit as st
 
@@ -14,21 +15,31 @@ def upload():
     uploaded_file = st.file_uploader("Upload an image or video to process", type=["png", "jpg", "jpeg", "mp4"], accept_multiple_files=True)
     if st.button("Process"):
         input_images = []
+        input_images3 = []
         input_videos = []
         processed_images = []
         processed_video_paths = []
         for file in uploaded_file:
             # print(file)
             if not file.name.endswith(".mp4"):
-                input_image = Image.open(file).convert("L")
-                input_image = cv2.resize(np.array(input_image), (st.session_state.IMAGE_SIZE, st.session_state.IMAGE_SIZE))/255
+                input_image = Image.open(file)
+                rgb_image = input_image.convert("RGB")
+                input_image = input_image.convert("L")
+
+                # input_image = cv2.resize(np.array(input_image), (st.session_state.IMAGE_SIZE, st.session_state.IMAGE_SIZE))/255
+                rgb_image = cv2.resize(np.array(rgb_image), (st.session_state.IMAGE_SIZE, st.session_state.IMAGE_SIZE))/255
                 input_images.append(input_image)
+                input_images3.append(
+                    st.session_state.rgb_colors[st.session_state.rgb_to_hsv_to_label_map(rgb_image)]
+                )
 
                 with st.spinner(f"Processing {file.name}..."):
-                    processed_image = mother_agent(
+                    processed_image = create_image(
                         input_image,
+                        st.session_state.IMAGE_SIZE,
                         st.session_state.selected_agent1,
                         st.session_state.selected_agent2,
+                        st.session_state.custom_objects
                     )
 
                 processed_images.append(processed_image)
@@ -54,6 +65,7 @@ def upload():
                 })
 
         st.session_state.input_images = input_images
+        st.session_state.input_images3 = input_images3
         st.session_state.input_videos = input_videos
         st.session_state.processed_images = processed_images
         st.session_state.processed_videos = processed_video_paths
