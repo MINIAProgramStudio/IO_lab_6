@@ -144,7 +144,7 @@ def find_smallest_loss(folder: list, agent_index: int):
         return 0
 
 
-@numba.jit
+
 def nearest_multiple(x, base=128):
     nearest = int(round(x / base) * base)
     return nearest if nearest >= base else base
@@ -154,7 +154,7 @@ def receive_shape(image: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_si
     return image[::patch_size, ::patch_size].shape
 
 
-@numba.jit
+
 def receive_amount(shape):
     result = 1
     for index in shape:
