@@ -4,11 +4,15 @@ import tensorflow as tf
 import streamlit as st
 from PIL import Image
 from io import BytesIO
+import numpy as np
 import subprocess
-import tempfile
+# import tempfile
+import numba
 import base64
+import tqdm
 import json
 import sys
+import cv2
 import os
 
 
@@ -34,12 +38,24 @@ def image_to_base64(image):
     return base64.b64encode(buffered.getvalue()).decode()
 
 
+def resize_image(image, h=128, w=128):
+    image = np.array(image)
+    image = cv2.resize(image, (h, w))
+
+    if np.max(image) > 1:
+        image = image / 255
+
+    return image
+
+
 def reproccess_images():
     st.session_state.processed_images = [
-        mother_agent(
+        create_image(
             img,
+            st.session_state.IMAGE_SIZE,
             st.session_state.selected_agent1,
-            st.session_state.selected_agent2
+            st.session_state.selected_agent2,
+            st.session_state.custom_objects
         ) for img in st.session_state.input_images
     ]
 
@@ -60,7 +76,7 @@ def reproccess_videos():
                 st.session_state.selected_agent1,
                 st.session_state.selected_agent2
             ])
-            print("Done")
+            # print("Done")
         processed_video_paths.append({
             "name": file.name,
             "path": save_path + "_result.mp4"
@@ -102,9 +118,9 @@ def find_smallest_loss(folder: list, agent_index: int):
                 try:
                     match agent_index:
                         case 1:
-                            loss = model.evaluate(st.session_state.dataset_agent1)[0]
+                            loss = model.evaluate(st.session_state.dataset_agent1, verbose=1)[0]
                         case 2:
-                            loss = model.evaluate(st.session_state.dataset_agent2)[0]
+                            loss = model.evaluate(st.session_state.dataset_agent2, verbose=1)
                 except Exception as e:
                     print(f"Failed to evaluate {model_name}, error: {e}")
                     loss = float("inf")
@@ -126,3 +142,115 @@ def find_smallest_loss(folder: list, agent_index: int):
         return folder.index(smallest_loss_model)
     else:
         return 0
+
+
+@numba.jit
+def nearest_multiple(x, base=128):
+    nearest = int(round(x / base) * base)
+    return nearest if nearest >= base else base
+
+
+def receive_shape(image: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: int = 128) -> np.ndarray[int]:
+    return image[::patch_size, ::patch_size].shape
+
+
+@numba.jit
+def receive_amount(shape):
+    result = 1
+    for index in shape:
+        result *= index
+    return result
+
+
+def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: int = 128) -> tuple[np.ndarray[np.float32], int]:
+    """Splits image into H * V smaller images. H (int): nearest to patch size, height // patch size. W (int): nearest to patch size, width // patch size
+
+    Args:
+        img (np.ndarray[np.uint8] | np.ndarray[np.float32]): Image to split. Can be 3-channel or just gray.
+        patch_size (int, optional): Size of smaller images (Depends on model). Defaults to 128.
+
+    Returns:
+        \b tuple[np.ndarray[np.float32], int]: (H * W, patch_size, patch_size) Gray images. Amount of images
+    """
+
+    original_height = img.shape[0]
+    original_width = img.shape[1]
+    # print(img.shape)
+    if __name__ == "agent_design":
+        new_height = np.min(nearest_multiple(original_height, patch_size), st.session_state.height * patch_size)
+        new_width = np.min(nearest_multiple(original_width, patch_size), st.session_state.width * patch_size)
+    else:
+        new_height = nearest_multiple(original_height, patch_size)
+        new_width = nearest_multiple(original_width, patch_size)
+    # print((new_height, new_width))
+    resized_img = cv2.resize(img, (new_width, new_height))
+    # resized_img = cv2.cvtColor(resized_img_, cv2.COLOR_RGB2GRAY)
+
+    # print(resized_img.shape)
+    small_matrices_shape = receive_shape(resized_img, patch_size)
+    # print(small_matrices_shape)
+
+    result = receive_amount(small_matrices_shape)
+
+    matrices = np.zeros((result, patch_size, patch_size))
+
+    if np.max(resized_img) > 1:
+        resized_img = resized_img / 255
+
+    row = np.array(np.split(resized_img, patch_size, axis=0))
+    col = np.array(np.split(row, patch_size, axis=2))
+
+    for row_index in range(0, patch_size):
+        for col_index in range(0, patch_size):
+            matrices[:, row_index, col_index] = col[col_index, row_index].reshape(-1)
+
+    # print(small_matrices_shape)
+    return matrices, result, small_matrices_shape
+
+
+def merge_matrices(base_img: np.ndarray[np.float32] | np.ndarray[np.uint8], matrices_3d: np.ndarray[np.float32], patch_size: int = 128, small_matrices_shape=(1, 1)) -> np.ndarray[np.float32]:
+
+    # small_matrices_shape = receive_shape(base_img, patch_size)
+    row_step, col_step = small_matrices_shape[0], small_matrices_shape[1]
+    output = np.zeros((row_step * patch_size, col_step * patch_size, 3), dtype=np.float32)
+    rows, cols = row_step * patch_size, col_step * patch_size
+
+    # print(small_matrices_shape, matrices_3d.shape)
+    # print(output.shape, rows, cols)
+    for row_index in range(0, rows, row_step):
+        for col_index in range(0, cols, col_step):
+            output[
+                row_index:row_index + row_step,
+                col_index:col_index + col_step
+            ] = matrices_3d[
+                    :,
+                    row_index//row_step,
+                    col_index//col_step
+                ].reshape(
+                        row_step,
+                        col_step,
+                        3
+                    )
+
+    return output
+
+
+def create_image(img: np.ndarray[np.float32] | np.ndarray[np.uint8], patch_size: int = 128, agent1_name: str = "", agent2_name: str = "", custom_objects=None) -> np.ndarray[np.float32]:
+    # img = cv2.imread('./datasets/photo_2025-05-28_01-27-02.jpg', cv2.IMREAD_COLOR_RGB)
+    img = np.array(img)
+
+    matrices, result, small_matrices_shape = split_image(img, patch_size)
+    matrices_3d = np.zeros((result, patch_size, patch_size, 3))
+    matrices_imask_3d = np.zeros((result, patch_size, patch_size, 3))
+    matrices_mask_3d = np.zeros((result, patch_size, patch_size, 3))
+    # print(matrices.shape)
+    for matrix_index in tqdm.tqdm(range(matrices.shape[0])):
+        predicat = mother_agent(matrices[matrix_index], agent1_name, agent2_name, custom_objects)
+        matrices_3d[matrix_index] = predicat[1]
+        matrices_imask_3d[matrix_index] = predicat[0]
+        matrices_mask_3d[matrix_index] = predicat[2]
+
+    image_with_mask = merge_matrices(img, matrices_imask_3d, patch_size, small_matrices_shape)
+    image_rgb = merge_matrices(img, matrices_3d, patch_size, small_matrices_shape)
+    mask = merge_matrices(img, matrices_mask_3d, patch_size, small_matrices_shape)
+    return image_with_mask, image_rgb, mask

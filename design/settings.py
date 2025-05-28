@@ -48,6 +48,37 @@ def settings():
         if "prev_agent2" not in st.session_state:
             st.session_state.prev_agent2 = selected_agent2
 
+        width = st.select_slider(
+            "Select width large images detalisation",
+            options=[
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                64,
+            ],
+            value=8,
+        )
+        height = st.select_slider(
+            "Select height large images detalisation",
+            options=[
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                64,
+            ],
+            value=4,
+        )
+        st.write("You selected ", width, "and", height)
+        # if st.button("Change", use_container_width=True):
+        st.session_state.width = width
+        st.session_state.height = height
+
         if (
             st.session_state.get("step") != "upload"
             and auto_update

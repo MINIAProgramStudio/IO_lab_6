@@ -1,4 +1,5 @@
-from .agents import mother_agent
+# from .agents import mother_agent
+from .functions import create_image
 
 import streamlit as st
 
@@ -25,7 +26,7 @@ def upload():
                 rgb_image = input_image.convert("RGB")
                 input_image = input_image.convert("L")
 
-                input_image = cv2.resize(np.array(input_image), (st.session_state.IMAGE_SIZE, st.session_state.IMAGE_SIZE))/255
+                # input_image = cv2.resize(np.array(input_image), (st.session_state.IMAGE_SIZE, st.session_state.IMAGE_SIZE))/255
                 rgb_image = cv2.resize(np.array(rgb_image), (st.session_state.IMAGE_SIZE, st.session_state.IMAGE_SIZE))/255
                 input_images.append(input_image)
                 input_images3.append(
@@ -33,10 +34,12 @@ def upload():
                 )
 
                 with st.spinner(f"Processing {file.name}..."):
-                    processed_image = mother_agent(
+                    processed_image = create_image(
                         input_image,
+                        st.session_state.IMAGE_SIZE,
                         st.session_state.selected_agent1,
                         st.session_state.selected_agent2,
+                        st.session_state.custom_objects
                     )
 
                 processed_images.append(processed_image)

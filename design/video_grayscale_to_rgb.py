@@ -10,11 +10,14 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
 
-import tensorflow as tf
-layers = tf.keras.layers
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import cv2
+
+from .functions import create_image
+
+import tensorflow as tf
+layers = tf.keras.layers
 
 AGENT1_NAME = "unet48hsv_e164_l0.6135.keras"
 AGENT2_NAME = "test45_e65_l0.0939.keras"
@@ -28,69 +31,61 @@ custom_objects = {
     'combined_loss_agent2_v2': sf.combined_loss_agent2_v2
 }
 
-def agent1_process(image: Image.Image, model_name: str) -> Image.Image:
+# def agent1_process(image: Image.Image, model_name: str) -> Image.Image:
 
-    try:
-        model = tf.keras.models.load_model(
-            f"./models/Agent1/{model_name}",
-            custom_objects=custom_objects
-        )
-    except Exception:
-        try:
-            model = tf.keras.models.load_model(
-                f"./models/Agent1/{model_name}",
-                custom_objects=custom_objects
-            )
-        except Exception:
-            return
+#     try:
+#         model = tf.keras.models.load_model(
+#             f"./models/Agent1/{model_name}",
+#             custom_objects=custom_objects
+#         )
+#     except Exception:
+#         try:
+#             model = tf.keras.models.load_model(
+#                 f"./models/Agent1/{model_name}",
+#                 custom_objects=custom_objects
+#             )
+#         except Exception:
+#             return
 
-    img = image.copy()  # (128, 128)
-    masks = model.predict(img, verbose = 0)  # (128, 128, 9)
-    mask = np.argmax(masks, axis=3)  # (128, 128)
-    # d3_gray_image = tf.concat([img for _ in range(3)], axis=2)  # (128, 128, 3)
+#     img = image.copy()  # (128, 128)
+#     masks = model.predict(img, verbose = 0)  # (128, 128, 9)
+#     mask = np.argmax(masks, axis=3)  # (128, 128)
 
-    # rgb_mask = tf.gather(dflu.coco_rgb_colors_tf, mask)  # (?, 128, 128, 3)
-    # rgb_mask = (tf.cast(rgb_mask, tf.float32) / 255)  # (?, 128, 128, 3)
-    # image_with_mask = d3_gray_image * rgb_mask  # (?, 128, 128, 3)
-    image_with_mask = dflu.apply_mask_to_image(img, mask)  # (?, 128, 128, 3)
+#     image_with_mask = dflu.apply_mask_to_image(img, mask)  # (?, 128, 128, 3)
 
-    # st.image(image_with_mask)
-    # draw = ImageDraw.Draw(image_with_mask)
-    # draw.text((10, 10), f"Agent 1: {model_name}", fill="red")
-    return image_with_mask, mask
+#     return image_with_mask, mask
 
 
-def agent2_process(image: Image.Image, mask: Image.Image, model_name: str) -> Image.Image:
-    model = tf.keras.models.load_model(
-        f"./models/Agent2/{model_name}",
-        custom_objects={
-            'combined_loss_agent2': sf.combined_loss_agent2,
-            'combined_loss_agent2_v2': sf.combined_loss_agent2_v2
-        }
-    )
+# def agent2_process(image: Image.Image, mask: Image.Image, model_name: str) -> Image.Image:
+#     model = tf.keras.models.load_model(
+#         f"./models/Agent2/{model_name}",
+#         custom_objects={
+#             'combined_loss_agent2': sf.combined_loss_agent2,
+#             'combined_loss_agent2_v2': sf.combined_loss_agent2_v2
+#         }
+#     )
 
-    img = image.copy()
+#     img = image.copy()
 
-    img_true_hsv = model.predict([img, mask], verbose = 0)  # (128, 128, 1) -> (128, 128, 3)
+#     img_true_hsv = model.predict([img, mask], verbose = 0)  # (128, 128, 1) -> (128, 128, 3)
 
-    img_true_rgb = tf.image.hsv_to_rgb(img_true_hsv).numpy()
+#     img_true_rgb = tf.image.hsv_to_rgb(img_true_hsv).numpy()
 
-    # st.image(img_true_rgb)
-    # draw = ImageDraw.Draw(img_true_rgb)
-    # w, h = img.size
-    # draw.text((10, h - 30), f"Agent 2: {model_name}", fill="blue")
-    return img_true_rgb
+#     return img_true_rgb
 
 
-def mother_agent(image, model1, model2, train=None, val=None):
-    image_with_mask, mask = agent1_process(image, model1)
-    image_rgb = agent2_process(image, mask, model2)
-    return image_with_mask, image_rgb
+# def mother_agent(image, model1, model2, train=None, val=None):
+#     image_with_mask, mask = agent1_process(image, model1)
+#     image_rgb = agent2_process(image, mask, model2)
+#     return image_with_mask, image_rgb
+
 
 def preprocess_frame(frame):
-    resized = cv2.resize(frame, (128, 128))
-    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    # resized = cv2.resize(frame, (128, 128))
+    # gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return gray
+
 
 # Batch inference and postprocessing
 def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
@@ -102,7 +97,13 @@ def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
         batch_array = np.array(batch, dtype=np.float32) / 255.0  # (B, 128, 128)
         batch_array = np.expand_dims(batch_array, axis=-1)       # (B, 128, 128, 1)
 
-        rgb_pred = mother_agent(batch_array, AGENT1_NAME, AGENT2_NAME)[1]         # Output: (B, 128, 128, 3)
+        # rgb_pred = np.zeros((batch_size, 128, 128, 3), dtype=np.float32)
+        rgb_pred = []
+        for i in range(batch_size):
+            # rgb_pred[i] = create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1]
+            rgb_pred.append(create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1])
+        # rgb_pred = create_image(batch_array, 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1]         # Output: (B, 128, 128, 3)
+        rgb_pred = np.array(rgb_pred)
         rgb_uint8 = (rgb_pred * 255).astype(np.uint8)
         results.extend(rgb_uint8)
     return results
@@ -135,8 +136,9 @@ def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME
 
     # Resize output frames back to original size and write video
     for rgb_frame in tqdm(rgb_frames, desc="Writing output"):
-        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_CUBIC)  #, interpolation=cv2.INTER_CUBIC
-        rgb_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_RGB2BGR)
+        # rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_CUBIC)  #, interpolation=cv2.INTER_CUBIC
+        # rgb_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_RGB2BGR)
+        rgb_upscaled = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
         out.write(rgb_upscaled)
     out.release()
 
