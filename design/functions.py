@@ -7,7 +7,7 @@ from io import BytesIO
 import numpy as np
 import subprocess
 # import tempfile
-import numba
+ #import numba
 import base64
 import tqdm
 import json
@@ -144,7 +144,7 @@ def find_smallest_loss(folder: list, agent_index: int):
         return 0
 
 
-@numba.jit
+
 def nearest_multiple(x, base=128):
     nearest = int(round(x / base) * base)
     return nearest if nearest >= base else base
@@ -154,7 +154,7 @@ def receive_shape(image: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_si
     return image[::patch_size, ::patch_size].shape
 
 
-@numba.jit
+
 def receive_amount(shape):
     result = 1
     for index in shape:
@@ -162,7 +162,7 @@ def receive_amount(shape):
     return result
 
 
-def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: int = 128) -> tuple[np.ndarray[np.float32], int]:
+def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: int = 128, is_video: bool = False) -> tuple[np.ndarray[np.float32], int]:
     """Splits image into H * V smaller images. H (int): nearest to patch size, height // patch size. W (int): nearest to patch size, width // patch size
 
     Args:
@@ -176,12 +176,13 @@ def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: 
     original_height = img.shape[0]
     original_width = img.shape[1]
     # print(img.shape)
-    if __name__ == "agent_design":
-        new_height = np.min(nearest_multiple(original_height, patch_size), st.session_state.height * patch_size)
-        new_width = np.min(nearest_multiple(original_width, patch_size), st.session_state.width * patch_size)
+    print(__name__)
+    if not is_video:
+        new_height = min(nearest_multiple(original_height, patch_size), st.session_state.height * patch_size)
+        new_width = min(nearest_multiple(original_width, patch_size), st.session_state.width * patch_size)
     else:
-        new_height = nearest_multiple(original_height, patch_size)
-        new_width = nearest_multiple(original_width, patch_size)
+        new_height = min(nearest_multiple(original_height, patch_size), 2 * patch_size)
+        new_width = min(nearest_multiple(original_width, patch_size), 4 * patch_size)
     # print((new_height, new_width))
     resized_img = cv2.resize(img, (new_width, new_height))
     # resized_img = cv2.cvtColor(resized_img_, cv2.COLOR_RGB2GRAY)
@@ -235,16 +236,19 @@ def merge_matrices(base_img: np.ndarray[np.float32] | np.ndarray[np.uint8], matr
     return output
 
 
-def create_image(img: np.ndarray[np.float32] | np.ndarray[np.uint8], patch_size: int = 128, agent1_name: str = "", agent2_name: str = "", custom_objects=None) -> np.ndarray[np.float32]:
+def create_image(img: np.ndarray[np.float32] | np.ndarray[np.uint8], patch_size: int = 128, agent1_name: str = "", agent2_name: str = "", custom_objects=None, is_video: bool = False) -> np.ndarray[np.float32]:
     # img = cv2.imread('./datasets/photo_2025-05-28_01-27-02.jpg', cv2.IMREAD_COLOR_RGB)
     img = np.array(img)
 
-    matrices, result, small_matrices_shape = split_image(img, patch_size)
+    matrices, result, small_matrices_shape = split_image(img, patch_size, is_video)
     matrices_3d = np.zeros((result, patch_size, patch_size, 3))
     matrices_imask_3d = np.zeros((result, patch_size, patch_size, 3))
     matrices_mask_3d = np.zeros((result, patch_size, patch_size, 3))
     # print(matrices.shape)
-    for matrix_index in tqdm.tqdm(range(matrices.shape[0])):
+    iterator = range(matrices.shape[0])
+    if not is_video:
+        iterator = tqdm.tqdm(iterator)
+    for matrix_index in iterator:
         predicat = mother_agent(matrices[matrix_index], agent1_name, agent2_name, custom_objects)
         matrices_3d[matrix_index] = predicat[1]
         matrices_imask_3d[matrix_index] = predicat[0]
