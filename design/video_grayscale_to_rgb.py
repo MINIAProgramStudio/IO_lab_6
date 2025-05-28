@@ -101,7 +101,7 @@ def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
         rgb_pred = []
         for i in range(batch_size):
             # rgb_pred[i] = create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1]
-            rgb_pred.append(create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1])
+            rgb_pred.append(create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects, is_video=True)[1])
         # rgb_pred = create_image(batch_array, 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1]         # Output: (B, 128, 128, 3)
         rgb_pred = np.array(rgb_pred)
         rgb_uint8 = (rgb_pred * 255).astype(np.uint8)
