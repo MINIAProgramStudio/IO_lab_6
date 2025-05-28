@@ -48,7 +48,7 @@ dataset_loader.IMAGE_SIZE = 128
 #START_EPOCH = 0
 TOTAL_EPOCHS = 2000
 AGENT1_MODELS = "models/Agent1/"
-MODEL_SAVE_PATH = AGENT1_MODELS + "unet32drop_e{epoch:02d}_l{val_loss:.4f}.keras"
+MODEL_SAVE_PATH = AGENT1_MODELS + "unet32filtered_e{epoch:02d}_l{val_loss:.4f}.keras"
 #tf.debugging.set_log_device_placement(True)
 
 
@@ -59,30 +59,30 @@ train_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='train',
     train_img_dir=dataset_loader.coco_train_img_dir,
     channels=1,
-    output_tfrecord_path="FAILSAFE.tfrecord"
+    output_tfrecord_path="not_reversed_train.tfrecord"
 )
-
+"""
 print("precomputing val")
 val_tfrecord_path = dataset_loader.precompute_image_and_mask_dataset(
     split='val',
     val_img_dir=dataset_loader.coco_val_img_dir,
     channels=1,
-    output_tfrecord_path="FAILSAFE.tfrecord"
+    output_tfrecord_path="not_reversed_val.tfrecord"
 )
-exit()"""
+exit()
 print("creating datasets")
 # Create datasets
 
 coco_train = dataset_loader.coco_RGB_dataset_precomputed(
     split='train',
     channels=1,
-    tfrecord_path="tfrecords/128hsv1_train.tfrecord"
+    tfrecord_path="tfrecords/128filtered_train.tfrecord"
 )
 
 coco_val = dataset_loader.coco_RGB_dataset_precomputed(
     split='val',
     channels=1,
-    tfrecord_path="tfrecords/128hsv1_val.tfrecord"
+    tfrecord_path="tfrecords/128filtered_val.tfrecord"
 )
 print("MS COCO loaded.")
 """
