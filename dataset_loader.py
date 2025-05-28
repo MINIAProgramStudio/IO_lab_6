@@ -289,14 +289,14 @@ def rgb_to_hsv_to_label_map_optimized(img):
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
 
     conds = tf.stack([
-        tf.logical_and(s < 0.1, v > 0.9),                      # light
-        v < 0.3,                                               # dark
-        tf.logical_or(h < 1/12, h > 11/12),                    # red
-        tf.math.abs(h - 1/3) < 1/12,                           # green
-        tf.math.abs(h - 2/3) < 1/12,                           # blue
-        tf.math.abs(h - 1/2) < 1/12,                           # cyan
-        tf.math.abs(h - 1/8) < 1/12,                           # yellow
-        tf.math.abs(h - 5/6) < 1/12                            # magenta
+        tf.logical_and(s < 0.2, v > 0.82),                      # light
+        v < 0.15,                                               # dark
+        tf.logical_or(h < 1/13.5, h > 31/32),                    # red
+        tf.math.abs(h - 0.8/3) < 1/6.75,                           # green
+        tf.math.abs(h - 2/3) < 1/11,                           # blue
+        tf.math.abs(h - 1/2) < 1/9,                           # cyan
+        tf.math.abs(h - 1/8) < 1/15,                           # yellow
+        tf.math.abs(h - 5/6) < 1/4                            # magenta
     ], axis=0)  # shape: (8, H, W)
 
     # Last class if no condition matches
