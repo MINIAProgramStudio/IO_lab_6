@@ -176,12 +176,14 @@ def split_image(img: np.ndarray[np.uint8] | np.ndarray[np.float32], patch_size: 
     original_height = img.shape[0]
     original_width = img.shape[1]
     # print(img.shape)
+    new_height = 128
+    new_width = 128
     if not is_video:
         new_height = min(nearest_multiple(original_height, patch_size), st.session_state.height * patch_size)
         new_width = min(nearest_multiple(original_width, patch_size), st.session_state.width * patch_size)
     else:
-        new_height = min(nearest_multiple(original_height, patch_size), 2 * patch_size)
-        new_width = min(nearest_multiple(original_width, patch_size), 4 * patch_size)
+        new_height = min(nearest_multiple(original_height, patch_size), 1 * patch_size)
+        new_width = min(nearest_multiple(original_width, patch_size), 2 * patch_size)
     # print((new_height, new_width))
     resized_img = cv2.resize(img, (new_width, new_height))
     # resized_img = cv2.cvtColor(resized_img_, cv2.COLOR_RGB2GRAY)
@@ -238,7 +240,8 @@ def merge_matrices(base_img: np.ndarray[np.float32] | np.ndarray[np.uint8], matr
 def create_image(img: np.ndarray[np.float32] | np.ndarray[np.uint8], patch_size: int = 128, agent1_name: str = "", agent2_name: str = "", custom_objects=None, is_video: bool = False) -> np.ndarray[np.float32]:
     # img = cv2.imread('./datasets/photo_2025-05-28_01-27-02.jpg', cv2.IMREAD_COLOR_RGB)
     img = np.array(img)
-
+    if len(img.shape) == 4:
+        img = img[0]
     matrices, result, small_matrices_shape = split_image(img, patch_size, is_video)
     matrices_3d = np.zeros((result, patch_size, patch_size, 3))
     matrices_imask_3d = np.zeros((result, patch_size, patch_size, 3))

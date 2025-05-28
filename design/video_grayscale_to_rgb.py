@@ -4,6 +4,7 @@ from random import random
 import cv2
 import numpy as np
 from tqdm import tqdm
+import frame_paralel
 
 import dataset_loader as dl
 import some_functions as sf
@@ -91,12 +92,10 @@ def preprocess_frame(frame):
 
 
 # Batch inference and postprocessing
-def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
+def infer_and_postprocess(frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
     results = []
-    random_id = round(random(), 4)*10000
-    descriptor = "Process " + str(random_id)
-    for i in tqdm(range(0, len(gray_frames), batch_size), desc = descriptor):
-        batch = gray_frames[i:i+batch_size]
+    for i in tqdm(range(0, len(frames), batch_size), "Predicting color in batches"):
+        batch = frames[i:i+batch_size]
 
         # Step-by-step expansion to ensure correct shape
         batch_array = np.array(batch, dtype=np.float32) / 255.0  # (B, 128, 128)
@@ -104,27 +103,23 @@ def infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, batch_size=32):
 
         # rgb_pred = np.zeros((batch_size, 128, 128, 3), dtype=np.float32)
         rgb_pred = []
-        for i in range(batch_size):
+        for j in range(batch_size):
             # rgb_pred[i] = create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1]
-            rgb_pred.append(create_image(batch_array[i], 128, AGENT1_NAME, AGENT2_NAME, custom_objects, is_video=True)[1])
+            rgb_pred.append(create_image(batch_array[j], 128, AGENT1_NAME, AGENT2_NAME, custom_objects, is_video=True)[1])
         # rgb_pred = create_image(batch_array, 128, AGENT1_NAME, AGENT2_NAME, custom_objects)[1]         # Output: (B, 128, 128, 3)
         rgb_pred = np.array(rgb_pred)
         rgb_uint8 = (rgb_pred * 255).astype(np.uint8)
         results.extend(rgb_uint8)
     return results
 
-def infer_and_postprocess_paralel(args):
-    return infer_and_postprocess(*args)
-
 def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME: str, AGENT2_NAME: str) -> None:
     cap = cv2.VideoCapture(input_path)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     original_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, fps, (original_w, original_h))
-
     # Read all frames
     frames = []
     for _ in tqdm(range(frame_count), desc="Loading frames"):
@@ -135,24 +130,24 @@ def create_video_from_gray_to_rgb(input_path: str, output_path: str, AGENT1_NAME
     cap.release()
 
     # Preprocess frames in parallel: center crop + grayscale
-    with Pool(cpu_count()//2) as pool:
-        gray_frames = list(tqdm(pool.imap(preprocess_frame, frames), total=len(frames), desc="Preprocessing"))
-
-    # Inference (assume infer_and_postprocess returns list of RGB frames 128x128 uint8)
-    combined_iterable = zip(
-        gray_frames,
-        repeat(AGENT1_NAME),
-        repeat(AGENT2_NAME),
-        repeat(8)
-    )
     with Pool(cpu_count() // 2) as pool:
-        rgb_frames = list(tqdm(pool.imap(infer_and_postprocess_paralel, combined_iterable, chunksize = len(gray_frames)//(cpu_count()*2)), total=len(frames), desc = "Color prediction"))
+        gray_frames = list(tqdm(pool.map(preprocess_frame, frames), total=len(frames), desc="Preprocessing"))
+
+    # Inference
+    """
+    iterable = [[frame, AGENT1_NAME, AGENT2_NAME] for frame in gray_frames]
+    print("Total frames", len(iterable))
+    with Pool(cpu_count() // 2) as pool:
+        rgb_frames = list(tqdm(pool.map(frame_paralel.infer_and_postprocess_paralel, iterable, chunksize=1),
+                               total=len(iterable), desc="Color prediction"))
+                               """
+    rgb_frames = infer_and_postprocess(gray_frames, AGENT1_NAME, AGENT2_NAME, 8)
 
     # Resize output frames back to original size and write video
+
     for rgb_frame in tqdm(rgb_frames, desc="Writing output"):
-        # rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_CUBIC)  #, interpolation=cv2.INTER_CUBIC
-        # rgb_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_RGB2BGR)
-        rgb_upscaled = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+        rgb_upscaled = cv2.resize(rgb_frame, (original_w, original_h), interpolation=cv2.INTER_CUBIC)
+        rgb_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_RGB2BGR)
         out.write(rgb_upscaled)
     out.release()
 
