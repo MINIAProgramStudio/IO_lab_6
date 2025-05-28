@@ -245,7 +245,10 @@ def create_image(img: np.ndarray[np.float32] | np.ndarray[np.uint8], patch_size:
     matrices_imask_3d = np.zeros((result, patch_size, patch_size, 3))
     matrices_mask_3d = np.zeros((result, patch_size, patch_size, 3))
     # print(matrices.shape)
-    for matrix_index in tqdm.tqdm(range(matrices.shape[0])):
+    iterator = range(matrices.shape[0])
+    if not is_video:
+        iterator = tqdm.tqdm(iterator)
+    for matrix_index in iterator:
         predicat = mother_agent(matrices[matrix_index], agent1_name, agent2_name, custom_objects)
         matrices_3d[matrix_index] = predicat[1]
         matrices_imask_3d[matrix_index] = predicat[0]
