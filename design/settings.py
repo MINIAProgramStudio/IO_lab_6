@@ -79,12 +79,23 @@ def settings():
         st.session_state.width = width
         st.session_state.height = height
 
+        if "prev_width" not in st.session_state:
+            st.session_state.prev_width = width
+        if "prev_height" not in st.session_state:
+            st.session_state.prev_height = height
+
+
         if (
             st.session_state.get("step") != "upload"
             and auto_update
-            and (selected_agent1 != st.session_state.prev_agent1 or selected_agent2 != st.session_state.prev_agent2)
+            and (selected_agent1 != st.session_state.prev_agent1
+                 or selected_agent2 != st.session_state.prev_agent2
+                 or width != st.session_state.prev_width
+                 or height != st.session_state.prev_height)
         ):
             reproccess_images()
             st.session_state.prev_agent1 = selected_agent1
             st.session_state.prev_agent2 = selected_agent2
+            st.session_state.prev_width = width
+            st.session_state.prev_height = height
             st.experimental_rerun()
